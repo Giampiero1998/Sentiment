@@ -1,0 +1,17 @@
+Core Data Science
+scikit-learn
+pandas
+
+API Framework
+fastapi
+uvicorn[standard]
+
+Experiment Tracking
+mlflow
+
+Testing Framework
+pytest
+requests 
+
+Monitoring (Base)
+prometheus-fastapi-instrumentator
