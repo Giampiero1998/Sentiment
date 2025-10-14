@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # 1. Servizio API FastAPI (Il tuo modello in produzione)
+  sentiment_api:
+    # Istruisce Docker Compose a usare il Dockerfile in questa directory per costruire l'immagine
+    build: .
+    image: sentiment-analysis-api:local
+    container_name: sentiment_api
+    ports:
+      # Mappa le porte per l'accesso all'API
+      - "8000:8000"
+    environment:
+      # Variabile d'ambiente legata alla sicurezza dell'API
+      - API_KEY=SUPER_SECRET_TOKEN_12345 
+    # Label per permettere a Prometheus di scoprire e monitorare questo servizio
+    labels:
+      - prometheus.io/scrape=true
+      - prometheus.io/port=8000
+      - prometheus.io/path=/metrics
+
+  # 2. Servizio Prometheus (Raccolta Metriche)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090" # Interfaccia Prometheus
+    volumes:
+      # Monta il file di configurazione locale per dire a Prometheus cosa monitorare
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    depends_on:
+      - sentiment_api # Avvia Prometheus dopo l'API
+
+  # 3. Servizio Grafana (Visualizzazione Metriche)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000" # Interfaccia Grafana
+    environment:
+      # Configurazioni di base per Grafana
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      # Persistenza dei dati di Grafana
+      - grafana-storage:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+# Definizione del volume per la persistenza dei dati di Grafana
+volumes:
+  grafana-storage:

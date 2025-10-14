@@ -1,0 +1,15 @@
+global:
+  # Intervallo di scraping per tutte le job
+  scrape_interval: 15s 
+
+scrape_configs:
+  # 1. Job per il server Prometheus stesso
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # 2. Job per l'API di sentiment analysis
+  - job_name: 'sentiment-api'
+    # Indirizzo del servizio Docker
+    static_configs:
+      - targets: ['sentiment_api:8000']
