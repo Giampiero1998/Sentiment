@@ -1,91 +1,129 @@
 pipeline {
-    agent any 
-
-    // Variabili Globali per la pipeline
+    agent any
+    
+    // Variabili d'ambiente globali
     environment {
-        // Nomi e configurazioni di build
-        DOCKER_IMAGE_NAME = "sentiment-api"
-        K8S_NAMESPACE = "default" 
-        
-        // Credenziali e servizi
-        MLFLOW_TRACKING_URI = "http://mlflow-server:5000" 
-        API_KEY = "SUPER_SECRET_TOKEN_12345" 
-        
-        // Variabili per notifica (da configurare in Jenkins)
-        SLACK_CHANNEL = "#mlops-notifications"
+        MIN_F1_SCORE_THRESHOLD = '0.85' 
+        API_KEY = 'SUPER_SECRET_TOKEN_12345'
+        DOCKER_IMAGE_NAME = 'sentiment-api'
+        DOCKER_REGISTRY = 'tuo_registry_docker'
+        MLFLOW_TRACKING_URI = 'sqlite:///mlruns.db' 
     }
 
     stages {
-        stage('Checkout Code') {
-            steps {
-                echo "1. Clonaggio del codice dal SCM (GitHub/GitLab)."
-                checkout scm
-            }
-        }
-
-        stage('Model Training & Local Archive') {
+        
+         //Fase 1: Training del modello e validazione della qualità
+        stage('Model Training') {
             steps {
                 script {
-                    echo "2. Addestramento del modello, archiviazione locale dei file .pkl e tracciamento su MLflow."
-                    sh "export MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}"
-                    sh 'python3 train_model.py'
+                    echo 'Starting model training and logging to MLflow...'
+                    //Esporta l'URI di MLflow e avvia lo script di training
+                    sh "export MLFLOW_TRACKING_URI='${MLFLOW_TRACKING_URI}' && python3 train_model.py"
                 }
             }
         }
-
+        
+        //Implementazione del Quality Gate
+        stage('Validate Model Quality') {
+            steps {
+                script {
+                    echo 'Reading F1-Score from model_metrics.txt...'
+                    // 1. Legge l'F1-Score dal file generato da train_model.py
+                    def f1_score = sh(script: "cat model_metrics.txt", returnStdout: true).trim()
+                    
+                    // 2. Confronto con la soglia definita
+                    if (f1_score.toFloat() < MIN_F1_SCORE_THRESHOLD.toFloat()) {
+                        error("❌ Deployment BLOCKED: F1-Score (${f1_score}) is below threshold (${MIN_F1_SCORE_THRESHOLD}). Model quality insufficient.")
+                    } else {
+                        echo "✅ Quality Gate Passed: F1-Score (${f1_score}) is acceptable."
+                    }
+                }
+            }
+        }
+        
+        // Fase 2: Test e sanity check dell'API
         stage('Tests') {
             steps {
-                echo "3. Esecuzione dei test (unitari e di integrazione dell'API)."
                 script {
-                    // Avvia l'API in background per i test di integrazione
-                    sh "export API_KEY=${API_KEY} && uvicorn api:app --host 0.0.0.0 --port 8000 &"
-                    sh "sleep 5" // Tempo per l'avvio del server
+                    echo 'Running application and API tests...'
+                    sh "export API_KEY='${API_KEY}' && uvicorn api:app --host 0.0.0.0 --port 8000 &"
                     
-                    // Esegue i test funzionali con Pytest
-                    sh "pytest test_api.py"
+                    // Attende qualche secondo per assicurarsi che l'API sia avviata
+                    sleep 5
                     
-                    // Killa il processo API
-                    sh "kill \$(lsof -t -i:8000)"
+                    // Esegue i test con pytest
+                    sh "pytest"
+                    
+                    // Termina il server Uvicorn
+                    sh "pkill -f 'uvicorn api:app'" 
                 }
             }
         }
-
+        
+        // Fase 3: Building e versioning dell'Immagine Docker
         stage('Build Docker Image') {
             steps {
-                echo "4. Costruzione dell'immagine Docker con i file .pkl archiviati localmente."
                 script {
-                    sh "docker build -t ${DOCKER_IMAGE_NAME}:${env.BUILD_ID} ."
+                    // Ottiene l'hash del commit Git per il versioning
+                    def GIT_COMMIT_TAG = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    echo "Using Git Commit Hash as tag: ${GIT_COMMIT_TAG}"
+
+                    // Definisce il tag completo dell'immagine Docker
+                    def DOCKER_IMAGE_FULL_TAG = "${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${GIT_COMMIT_TAG}"
+                    
+                    // Build dell'immagine Docker
+                    sh "docker build -t ${DOCKER_IMAGE_FULL_TAG} ."
+
+                    // Push dell'immagine al registry Docker
+                    echo "Docker image built and pushed: ${DOCKER_IMAGE_FULL_TAG}"
+                    sh "docker push ${DOCKER_IMAGE_FULL_TAG}"
+
+                    // Push sicuro tramite credenziali definite dall'identificativo 'docker-registry-creds'
+                    withCredentials([usernamePassword(credentialsId: 'docker-registry-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin ${DOCKER_REGISTRY}"
+                        sh "docker push ${DOCKER_IMAGE_FULL_TAG}"
+                        sh "docker logout ${DOCKER_REGISTRY}"
+                    }
+
+                    // Aggiorna le variabili d'ambiente per i passaggi successivi
+                    env.DOCKER_IMAGE_TAG = GIT_COMMIT_TAG
+                    env.DOCKER_IMAGE_FULL_TAG = DOCKER_IMAGE_FULL_TAG
                 }
             }
         }
 
+        // Fase 4: Deploy su Kubernetes
         stage('Deploy to Kubernetes') {
             steps {
-                echo "5. Deploy al cluster Kubernetes integrato in Docker Desktop (NodePort: 30080)."
                 script {
-                    // Sostituisce il placeholder dell'immagine nel manifest K8s
-                    sh "sed 's|IMAGE_PLACEHOLDER|${DOCKER_IMAGE_NAME}:${env.BUILD_ID}|g' k8s_deployment.yml > final_k8s_deployment.yml"
+                    echo 'Deploying to Kubernetes cluster...'
                     
-                    // Applicazione del manifest (richiede kubectl configurato per Docker Desktop)
-                    // sh "kubectl apply -f final_k8s_deployment.yml --namespace ${K8S_NAMESPACE}"
-                    echo "Deploy K8s simulato completato. L'immagine ${DOCKER_IMAGE_NAME}:${env.BUILD_ID} è stata specificata."
+                    // 1. Sostituisce il placeholder nell'YAML con il tag corretto dell'immagine
+                    sh "sed 's|IMAGE_PLACEHOLDER|${DOCKER_IMAGE_FULL_TAG}|g' k8s_deployment.yml > k8s_deployment_final.yml"
+                    
+                    // 2. Applica la configurazione a Kubernetes
+                    sh "kubectl apply -f k8s_deployment_final.yml"
+                    echo "Deployment completed for version: ${DOCKER_IMAGE_FULL_TAG}"
+                }
+            }
+
+            // Gestione del rollback in caso di fallimento del deploy
+            post {
+                failure {
+                    echo "🚨 Deployment fallito! Avvio il rollback automatico..."
+                    sh "kubectl rollout undo deployment/sentiment-analysis-deployment"
+                    echo "✅ Rollback completato. Ripristinata la versione precedente."
                 }
             }
         }
     }
-    
-    // Post-Esecuzione: Notifiche
+    // Gestione degli esiti della pipeline
     post {
-        always {
-            echo "Pipeline terminata. Stato: ${currentBuild.result}"
-        }
         success {
-            echo "Pipeline SUCCESS. Invia notifica su ${SLACK_CHANNEL}."
-            // slackSend channel: SLACK_CHANNEL, color: 'good', message: "Pipeline MLOps #${BUILD_NUMBER} SUCCESS."
+            echo 'Pipeline completed successfully.'
         }
         failure {
-            echo "Pipeline FAILURE. Invia allarme su ${SLACK_CHANNEL}."
-            // slackSend channel: SLACK_CHANNEL, color: 'danger', message: "Pipeline MLOps #${BUILD_NUMBER} FAILED."
+            echo 'Pipeline failed. Check logs for details.'
         }
     }
 }

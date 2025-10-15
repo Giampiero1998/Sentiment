@@ -1,0 +1,70 @@
+ # Definisce il deployment per l'applicazione di analisi del sentiment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentiment-analysis-deployment
+  labels:
+    app: sentiment-api
+spec:
+  # Numero di repliche dell'applicazione
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sentiment-api
+  template:
+    metadata:
+      labels:
+        app: sentiment-api
+    spec:
+      # 1. Riferimento all'ImagePullSecret (creato manualmente come 'regcred')
+      # Questo permette a Kubernetes di autenticarsi al tuo registry privato (tuo_registry_docker) per scaricare l'immagine.
+      imagePullSecrets:
+      - name: regcred
+        
+      containers:
+      - name: sentiment-api-container
+        # Placeholder che verrà sostituito dal Jenkinsfile con il tag GIT (es. tuo_registry_docker/sentiment-api:a1b2c3d)
+        image: IMAGE_PLACEHOLDER 
+        ports:
+        - containerPort: 8000
+
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        
+        # 2. Carica l'API_KEY dal Secret di Kubernetes (sentiment-api-key)
+        # Iniettando la chiave come variabile d'ambiente, la si mantiene fuori dal codice sorgente e dai file di configurazione non crittografati.
+        env:
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: sentiment-api-key # Nome del Secret creato
+              key: API_KEY # Chiave all'interno del Secret
+        # 3. Configura le sonde di liveness e readiness per monitorare lo stato dell'applicazione
+        livenessProbe:  
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10 
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+
+  # NodePort Service per esporre l'applicazione all'esterno del cluster
+---
+  type: NodePort 
+  ports:
+    - port: 80
+      targetPort: 8000 # La porta interna del container
+      nodePort: 30080 # Porta esterna, accessibile su http://localhost:30080
+      protocol: TCP

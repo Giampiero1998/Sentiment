@@ -1,17 +1,17 @@
-Core Data Science
+# Core Data Science
 scikit-learn
 pandas
 
-API Framework
+# API Framework
 fastapi
 uvicorn[standard]
 
-Experiment Tracking
+# Experiment Tracking
 mlflow
 
-Testing Framework
+# Testing Framework
 pytest
-requests 
+requests # Per i test funzionali dell'API
 
-Monitoring (Base)
+# Monitoring (Base)
 prometheus-fastapi-instrumentator
