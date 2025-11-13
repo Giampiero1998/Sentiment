@@ -88,19 +88,9 @@ pipeline {
         
         // Fase 3: Building e versioning dell'Immagine Docker
         stage('Build Docker Image') {
-            agent {
-                docker {
-                    image 'docker:latest'
-                    args '-v /var/run/docker.sock:/var/run/docker.sock' // Accesso al demone Docker
-                }
-            }
+            agent any  // ✅ FIX: Usa l'agent principale con Docker già installato
             steps {
                 script {
-                    // Installa Git, Curl, Bash necessari per il versioning e il login Docker
-                    sh '''
-                    apk update && apk add git curl bash
-                    '''
-
                     // Ottiene l'hash del commit Git per il versioning
                     def GIT_COMMIT_TAG = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     echo "Using Git Commit Hash as tag: ${GIT_COMMIT_TAG}"
@@ -112,10 +102,9 @@ pipeline {
                     echo "Building Docker image with full tag: ${DOCKER_IMAGE_FULL_TAG}"
                     sh "docker build -t ${DOCKER_IMAGE_FULL_TAG} ."
 
-
                     // Push sicuro tramite credenziali
                     withCredentials([usernamePassword(credentialsId: 'docker-registry-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin ${DOCKER_REGISTRY}"
+                        sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin ${DOCKER_REGISTRY}"
 
                         sh "docker push ${DOCKER_IMAGE_FULL_TAG}"
                         echo "Docker image pushed successfully: ${DOCKER_IMAGE_FULL_TAG}"
@@ -132,33 +121,17 @@ pipeline {
 
         // Fase 4: Deploy su Kubernetes
         stage('Deploy to Kubernetes') {
-            agent {
-                // Usiamo un container Docker sidecar per isolare l'ambiente Python
-                docker {
-                    image 'python:3.10-slim' 
-                    args '-u root'
-                }
-            }
+            agent any  // ✅ FIX: Usa l'agent principale
             steps {
                 script {
-                    echo 'Installing kubectl...'
-                    // Installazione di kubectl all'interno del container Docker
-                    sh '''
-                    apt-get update
-                    apt-get install -y curl
-                    curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
-                    chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl
-                    '''
-                    echo "kubectl installed."
-
                     echo 'Deploying to Kubernetes cluster...'
                     
                     // 1. Sostituisce il placeholder nell'YAML con il tag corretto dell'immagine
-                    sh "sed 's|IMAGE_PLACEHOLDER|${DOCKER_IMAGE_FULL_TAG}|g' k8s_deployment.yml > k8s_deployment_final.yml"
+                    sh "sed 's|IMAGE_PLACEHOLDER|${env.DOCKER_IMAGE_FULL_TAG}|g' k8s_deployment.yml > k8s_deployment_final.yml"
                     
                     // 2. Applica la configurazione a Kubernetes
                     sh "kubectl apply -f k8s_deployment_final.yml"
-                    echo "Deployment completed for version: ${DOCKER_IMAGE_FULL_TAG}"
+                    echo "Deployment completed for version: ${env.DOCKER_IMAGE_FULL_TAG}"
                 }
             }
 
@@ -175,10 +148,10 @@ pipeline {
     // Gestione degli esiti della pipeline
     post {
         success {
-            echo 'Pipeline completed successfully.'
+            echo '✅ Pipeline completed successfully!'
         }
         failure {
-            echo 'Pipeline failed. Check logs for details.'
+            echo '❌ Pipeline failed. Check logs for details.'
         }
     }
 }
