@@ -6,7 +6,7 @@ pipeline {
         MIN_F1_SCORE_THRESHOLD = '0.85' 
         API_KEY = 'SUPER_SECRET_TOKEN_12345'
         DOCKER_IMAGE_NAME = 'sentiment-api'
-        DOCKER_REGISTRY = 'tuo_registry_docker'
+        DOCKER_REGISTRY = 'docker.io/giampiero98'
         MLFLOW_TRACKING_URI = 'sqlite:///mlruns.db' 
     }
 
@@ -14,6 +14,12 @@ pipeline {
         
          //Fase 1: Training del modello e validazione della qualità
         stage('Model Training') {
+            agent {
+                docker {
+                    image 'python:3.10-slim'
+                    args '-u root'
+                }
+            }
             steps {
                 script {
                     echo 'Starting model training and logging to MLflow...'
@@ -25,6 +31,12 @@ pipeline {
         
         //Implementazione del Quality Gate
         stage('Validate Model Quality') {
+            agent {
+                docker {
+                    image 'python:3.10-slim'
+                    args '-u root'
+                }
+            }
             steps {
                 script {
                     echo 'Reading F1-Score from model_metrics.txt...'
@@ -43,19 +55,38 @@ pipeline {
         
         // Fase 2: Test e sanity check dell'API
         stage('Tests') {
+            agent {
+                docker {
+                    image 'python:3.10-slim'
+                    args '-u root'
+                }
+            }
             steps {
                 script {
                     echo 'Running application and API tests...'
                     sh "export API_KEY='${API_KEY}' && uvicorn api:app --host 0.0.0.0 --port 8000 &"
                     
-                    // Attende qualche secondo per assicurarsi che l'API sia avviata
-                    sleep 5
+                    // Ciclo curl per testare attivamente l'endpoint dell'API
+                    sh '''
+                    echo "Performing sanity check on the API endpoint..."
+                    apk add curl 
+
+                    timeout 30 bash -c \
+                    'while ! curl -s http://0.0.0.0:8000/health | grep -q "ok"; do \
+                    echo -n "Waiting for API to be healthy"; \
+                    sleep 1; \
+                    done; \
+                    echo ""; \
+                    echo "API is healthy!"'
+                    '''
                     
                     // Esegue i test con pytest
+                    echo "Executing pytest for API tests..."
                     sh "pytest"
                     
                     // Termina il server Uvicorn
-                    sh "pkill -f 'uvicorn api:app'" 
+                    echo "Stopping Uvicorn server..."
+                    sh "pkill uvicorn || true" 
                 }
             }
         }
@@ -77,6 +108,9 @@ pipeline {
                     // Push dell'immagine al registry Docker
                     echo "Docker image built and pushed: ${DOCKER_IMAGE_FULL_TAG}"
                     sh "docker push ${DOCKER_IMAGE_FULL_TAG}"
+
+                    //Debug
+                    echo "Building image with full tag: ${DOCKER_IMAGE_FULL_TAG}"
 
                     // Push sicuro tramite credenziali definite dall'identificativo 'docker-registry-creds'
                     withCredentials([usernamePassword(credentialsId: 'docker-registry-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {

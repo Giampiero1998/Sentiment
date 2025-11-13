@@ -15,15 +15,30 @@ mlflow.set_experiment("Sentiment_Analysis_Production")
 # 2. Preparazione dati di addestramento
 data = {
     'text': [
+        # Dataset iniziale
         "I love this product, it's fantastic!", 
         "Terrible experience, I will not buy it again.",
         "The service was decent, but nothing exceptional.",
         "I am extremely satisfied with the result.",
         "What a disappointment, money thrown away.",
         "This film is an absolute masterpiece.",
-        "The shipping was slow and the packaging broken."
+        "The shipping was slow and the packaging broken.",
+        "This is a phenomenal result, I'm thrilled!", 
+        "I highly recommend this service.",           
+        "The staff was incredibly kind and helpful.",
+        "I found the response time unacceptable.",
+        "Working with this API is extremely pleasant.",
+        "I regret spending my money on this cheap imitation.",
+        "Excellent quality, fast delivery.",
+        "The product is complete garbage.",
+        "I will be returning this immediately.",
+        "Fantastic service, very helpful.",
+        "The quality is very poor and it broke."
     ],
-    'sentiment': [1, 0, 0, 1, 0, 1, 0] # 1: Positive, 0: Negative
+    'sentiment': [
+        1, 0, 0, 1, 0, 1, 0, 
+        1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0
+    ] # 1: Positive, 0: Negative
 }
 df = pd.DataFrame(data)
 
@@ -74,8 +89,8 @@ with mlflow.start_run() as run:
     print(f"F1-Score salvato in {METRICS_FILE}: {f1}")
 
     # 5. Serializzazione e archiviazione locale
-    MODEL_PATH = 'sentimentanalysismodel.pkl'
-    VECTORIZER_PATH = 'sentimentanalysis_vectorizer.pkl'
+    MODEL_PATH = 'sentiment_model.pkl'
+    VECTORIZER_PATH = 'tfidf_vectorizer.pkl'
 
     # Archivia i file .pkl sul filesystem per il Docker container
     with open(MODEL_PATH, 'wb') as f:
@@ -83,10 +98,11 @@ with mlflow.start_run() as run:
     with open(VECTORIZER_PATH, 'wb') as f:
         pickle.dump(vectorizer, f)
     
+    print(f"MLflow Run ID: {run.info.run_id}")
+    print(f"Modello ({MODEL_PATH}) e vettorizzatore archiviati in locale e tracciati su MLflow.")
+    
     # Log dei file .pkl come artifact in MLflow
     mlflow.log_artifact(MODEL_PATH)
     mlflow.log_artifact(VECTORIZER_PATH)
     mlflow.log_artifact(METRICS_FILE) # Log del file delle metriche
     
-    print(f"MLflow Run ID: {run.info.run_id}")
-    print(f"Modello ({MODEL_PATH}) e Vettorizzatore archiviati in locale e tracciati su MLflow.")

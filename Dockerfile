@@ -10,11 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copia i file del modello archiviati localmente (dal runner CI/CD) nell'immagine
 COPY api.py .
-COPY sentimentanalysismodel.pkl .
-COPY sentimentanalysis_vectorizer.pkl .
-
-# Variabile d'ambiente API_KEY, letta dall'API per l'autenticazione
-ENV API_KEY="SUPER_SECRET_TOKEN_12345"
+COPY sentiment_model.pkl .
+COPY tfidf_vectorizer.pkl .
 
 # Espone la porta su cui uvicorn (FastAPI) si metterà in ascolto
 EXPOSE 8000
