@@ -23,6 +23,9 @@ pipeline {
                 script {
                     echo 'Installing project dependencies from requirements.txt...'
                     sh 'pip install -r requirements.txt'
+                    //Pulisce eventuali modelli vecchi
+                    echo 'Cleaning up old model files...'
+                    sh 'rm -f sentiment_model.pkl tfidf_vectorizer.pkl model_metrics.txt || true'
 
                     // 1. Esegue il training e salva l'F1-Score in model_metrics.txt
                     echo 'Starting model training and logging to MLflow...'
