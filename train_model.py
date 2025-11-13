@@ -12,41 +12,77 @@ MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlruns.db")
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment("Sentiment_Analysis_Production")
 
-# 2. Preparazione dati di addestramento
+# 2. Preparazione dati di addestramento (DATASET AMPLIATO)
 data = {
     'text': [
-        # Dataset iniziale
+        # Positivi
         "I love this product, it's fantastic!", 
-        "Terrible experience, I will not buy it again.",
-        "The service was decent, but nothing exceptional.",
         "I am extremely satisfied with the result.",
-        "What a disappointment, money thrown away.",
         "This film is an absolute masterpiece.",
-        "The shipping was slow and the packaging broken.",
         "This is a phenomenal result, I'm thrilled!", 
         "I highly recommend this service.",           
         "The staff was incredibly kind and helpful.",
-        "I found the response time unacceptable.",
         "Working with this API is extremely pleasant.",
-        "I regret spending my money on this cheap imitation.",
         "Excellent quality, fast delivery.",
+        "Fantastic service, very helpful.",
+        "Amazing experience, will buy again!",
+        "Best purchase I've ever made.",
+        "Outstanding quality and service.",
+        "Absolutely love it, highly recommended!",
+        "Perfect in every way.",
+        "Exceeded all my expectations.",
+        "Wonderful product, great value.",
+        "Impressive results, very satisfied.",
+        "Brilliant service, fast response.",
+        "Superb quality, worth every penny.",
+        "Delighted with this purchase.",
+        "Incredible product, works perfectly.",
+        "Five stars, would recommend to anyone.",
+        "Exceptional service and quality.",
+        "Top notch product, very happy.",
+        "Great experience from start to finish.",
+        
+        # Negativi
+        "Terrible experience, I will not buy it again.",
+        "The service was decent, but nothing exceptional.",
+        "What a disappointment, money thrown away.",
+        "The shipping was slow and the packaging broken.",
+        "I found the response time unacceptable.",
+        "I regret spending my money on this cheap imitation.",
         "The product is complete garbage.",
         "I will be returning this immediately.",
-        "Fantastic service, very helpful.",
-        "The quality is very poor and it broke."
+        "The quality is very poor and it broke.",
+        "Waste of money, terrible quality.",
+        "Disappointed, not as described.",
+        "Poor service, would not recommend.",
+        "Broken on arrival, very upset.",
+        "Awful experience, never again.",
+        "Substandard quality, falling apart.",
+        "Not worth the price, disappointed.",
+        "Horrible product, doesn't work.",
+        "Terrible customer service, unhelpful.",
+        "Complete failure, avoid at all costs.",
+        "Worst purchase ever made.",
+        "Defective product, poor quality.",
+        "Unsatisfied, requesting refund.",
+        "Bad experience overall.",
+        "Low quality, breaks easily.",
+        "Regret buying this, waste of time."
     ],
     'sentiment': [
-        1, 0, 0, 1, 0, 1, 0, 
-        1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0
-    ] # 1: Positive, 0: Negative
+        # 25 positivi (1)
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        # 25 negativi (0)
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    ]
 }
 df = pd.DataFrame(data)
 
 # Parametri del modello
 MAX_FEATURES = 100
 RANDOM_STATE = 42
-TEST_SIZE = 0.3
-MIN_F1_SCORE_THRESHOLD = 0.85 # Soglia minima per il Quality Gate
+TEST_SIZE = 0.3  # 30% test = 15 campioni
+MIN_F1_SCORE_THRESHOLD = 0.85
 
 # Inizio della run MLflow
 with mlflow.start_run() as run:
@@ -56,6 +92,7 @@ with mlflow.start_run() as run:
     mlflow.log_param("max_features", MAX_FEATURES)
     mlflow.log_param("test_size", TEST_SIZE)
     mlflow.log_param("model_type", "LogisticRegression")
+    mlflow.log_param("dataset_size", len(df))
     
     # 3. Pre-processing e Addestramento
     X = df['text']
@@ -66,10 +103,12 @@ with mlflow.start_run() as run:
     X_vectorized = vectorizer.fit_transform(X)
 
     # Split dei dati
-    X_train, X_test, y_train, y_test = train_test_split(X_vectorized, y, test_size=TEST_SIZE, random_state=RANDOM_STATE)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_vectorized, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
+    )
 
     # Addestramento del modello
-    model = LogisticRegression()
+    model = LogisticRegression(max_iter=1000)
     model.fit(X_train, y_train)
 
     # 4. Valutazione e logging delle metriche
@@ -87,6 +126,8 @@ with mlflow.start_run() as run:
         f.write(str(f1))
     
     print(f"F1-Score salvato in {METRICS_FILE}: {f1}")
+    print(f"Accuracy: {accuracy}")
+    print(f"Test set size: {len(y_test)} samples")
 
     # 5. Serializzazione e archiviazione locale
     MODEL_PATH = 'sentiment_model.pkl'
@@ -104,5 +145,4 @@ with mlflow.start_run() as run:
     # Log dei file .pkl come artifact in MLflow
     mlflow.log_artifact(MODEL_PATH)
     mlflow.log_artifact(VECTORIZER_PATH)
-    mlflow.log_artifact(METRICS_FILE) # Log del file delle metriche
-    
+    mlflow.log_artifact(METRICS_FILE)
