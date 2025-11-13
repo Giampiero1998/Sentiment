@@ -1,1 +1,5 @@
 mlruns.db
+*.pkl
+model_metrics.txt
+mlruns.db
+mlruns/
