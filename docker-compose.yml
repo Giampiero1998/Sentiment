@@ -51,3 +51,5 @@ services:
 # Definizione del volume per la persistenza dei dati di Grafana
 volumes:
   grafana-storage:
+    driver: local
+    
