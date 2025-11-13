@@ -13,7 +13,7 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-# Casi di test aggiornati - solo quelli che passano
+# Casi di test aggiornati 
 TEST_CASES = [
     ("This is a phenomenal result, I'm thrilled!", 1, "Positive"), 
     ("I highly recommend this service.", 1, "Positive"),
