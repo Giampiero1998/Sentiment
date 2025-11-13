@@ -1,0 +1,8 @@
+{
+  "test_api.py::test_health_check": true,
+  "test_api.py::test_predict_sentiment_success[This is a phenomenal result, I'm thrilled!-1-Positive]": true,
+  "test_api.py::test_predict_sentiment_success[The wait was unacceptable and the product was defective.-0-Negative]": true,
+  "test_api.py::test_predict_sentiment_success[I highly recommend this service.-1-Positive]": true,
+  "test_api.py::test_predict_sentiment_success[The documentation is confusing and incomplete.-0-Negative]": true,
+  "test_api.py::test_predict_sentiment_unauthorized": true
+}
