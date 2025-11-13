@@ -11,6 +11,18 @@ pipeline {
     }
 
     stages {
+        stage('Docker Host Check') {
+    agent any // Eseguito sul nodo Jenkins principale
+    steps {
+        script {
+            echo "Verifica del client Docker sul nodo host..."
+            // Mostra la versione di Docker (se funziona, è installato e nel PATH)
+            sh 'docker version --format "{{.Client.Version}}"'
+            // Mostra se l'utente Jenkins ha accesso al socket Docker
+            sh 'docker info' 
+        }
+    }
+}
         
         // Fase 1: Training del modello e validazione della qualità
         stage('Model Training') {
