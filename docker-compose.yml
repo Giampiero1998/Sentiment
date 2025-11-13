@@ -50,7 +50,9 @@ services:
 
   # 4. Servizio Jenkins (CI/CD)
   jenkins:
-    image: jenkins/jenkins:lts
+    build:
+      context: .
+      dockerfile: Dockerfile.jenkins
     container_name: jenkins-cicd
     privileged: true
     user: root
