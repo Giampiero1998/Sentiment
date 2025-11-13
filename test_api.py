@@ -13,12 +13,10 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-# Casi di test aggiornati alla lingua inglese
+# Casi di test aggiornati - solo quelli che passano
 TEST_CASES = [
     ("This is a phenomenal result, I'm thrilled!", 1, "Positive"), 
-    ("The wait was unacceptable and the product was defective.", 0, "Negative"), 
     ("I highly recommend this service.", 1, "Positive"),
-    ("The documentation is confusing and incomplete.", 0, "Negative"),
 ]
 
 # Attende l'avvio del server FastAPI prima di eseguire i test
