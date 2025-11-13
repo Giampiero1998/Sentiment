@@ -12,10 +12,10 @@ MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlruns.db")
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment("Sentiment_Analysis_Production")
 
-# 2. Dataset più ampio e bilanciato per sentiment analysis
+# 2. Dataset più ampio e bilanciato per migliorare la generalizzazione
 data = {
     'text': [
-        # === SENTIMENTI POSITIVI (50) ===
+        #  Sentiment positivi (50)
         "I love this product, it's absolutely fantastic and amazing!",
         "Extremely satisfied with the exceptional quality and service!",
         "This is a masterpiece, exceeded all my expectations!",
@@ -67,7 +67,7 @@ data = {
         "Outstanding experience, will return!",
         "Brilliant quality, absolutely fantastic!",
         
-        # === SENTIMENTI NEGATIVI (50) ===
+        #  Sentiment negativi (50) 
         "Terrible experience, will never buy again, awful!",
         "Very disappointed, poor quality, waste of money!",
         "What a complete disappointment, money thrown away!",
