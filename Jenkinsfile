@@ -24,9 +24,8 @@ pipeline {
     }
 }
         
-        // Fase 1: Training del modello e validazione della qualità
-        stage('Model Training') {
-            // Usiamo un container Docker sidecar per isolare l'ambiente Python
+        // Fase 1 e 2: Training del modello e validazione della qualità 
+        stage('Model Training & Quality Gate') {
             agent {
                 docker {
                     image 'python:3.10-slim'
@@ -38,23 +37,14 @@ pipeline {
                     echo 'Installing project dependencies from requirements.txt...'
                     sh 'pip install -r requirements.txt'
 
+                    // 1. Esegue il training e salva l'F1-Score in model_metrics.txt
                     echo 'Starting model training and logging to MLflow...'
                     sh "export MLFLOW_TRACKING_URI='${MLFLOW_TRACKING_URI}' && python3 train_model.py"
-                }
-            }
-        }
-        
-        // Implementazione del Quality Gate 
-        stage('Validate Model Quality') {
-            // Usa l'agente host solo per leggere il file
-            agent any
-            steps {
-                script {
+                    
+                    // 2. Implementazione del Quality Gate (Eseguito all'interno del container)
                     echo 'Reading F1-Score from model_metrics.txt...'
-                    // 1. Legge l'F1-Score
                     def f1_score = sh(script: "cat model_metrics.txt", returnStdout: true).trim()
                     
-                    // 2. Confronto con la soglia definita
                     if (f1_score.toFloat() < MIN_F1_SCORE_THRESHOLD.toFloat()) {
                         error("❌ Deployment BLOCKED: F1-Score (${f1_score}) è sotto la soglia (${MIN_F1_SCORE_THRESHOLD}).")
                     } else {
