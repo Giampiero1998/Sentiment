@@ -95,6 +95,11 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
+                    //Installazione del client Docker
+                    sh '''
+                    echo "Installing Docker client..."
+                    apk add --no-cache docker
+                    '''
                     // Ottiene l'hash del commit Git per il versioning
                     def GIT_COMMIT_TAG = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     echo "Using Git Commit Hash as tag: ${GIT_COMMIT_TAG}"
@@ -102,20 +107,18 @@ pipeline {
                     // Definisce il tag completo dell'immagine Docker
                     def DOCKER_IMAGE_FULL_TAG = "${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${GIT_COMMIT_TAG}"
                     
-                    // Build dell'immagine Docker
+                    // Debug e build dell'immagine Docker
+                    echo "Building Docker image with full tag: ${DOCKER_IMAGE_FULL_TAG}"
                     sh "docker build -t ${DOCKER_IMAGE_FULL_TAG} ."
 
-                    // Push dell'immagine al registry Docker
-                    echo "Docker image built and pushed: ${DOCKER_IMAGE_FULL_TAG}"
-                    sh "docker push ${DOCKER_IMAGE_FULL_TAG}"
-
-                    //Debug
-                    echo "Building image with full tag: ${DOCKER_IMAGE_FULL_TAG}"
 
                     // Push sicuro tramite credenziali definite dall'identificativo 'docker-registry-creds'
                     withCredentials([usernamePassword(credentialsId: 'docker-registry-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin ${DOCKER_REGISTRY}"
+
                         sh "docker push ${DOCKER_IMAGE_FULL_TAG}"
+                        echo "Docker image pushed successfully: ${DOCKER_IMAGE_FULL_TAG}"
+                        
                         sh "docker logout ${DOCKER_REGISTRY}"
                     }
 
@@ -130,6 +133,12 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 script {
+                    //Installazione kubectl
+                    sh "apk add --no-cache curl bash"
+                    sh "curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+                    sh "chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl"
+                    echo "kubectl installed."
+
                     echo 'Deploying to Kubernetes cluster...'
                     
                     // 1. Sostituisce il placeholder nell'YAML con il tag corretto dell'immagine
