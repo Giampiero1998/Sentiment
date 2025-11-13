@@ -16,9 +16,17 @@ pipeline {
         steps {
             script {
                 echo 'Setting up the environment...'
-                // Installa gli strumenti di orchestrazione (Docker client, curl, bash, git) sull'agente Alpine
+                // Installa gli strumenti di orchestrazione (Docker client, curl, bash, git) su Debian/Ubuntu based agent
                 sh '''
-                apk add --no-cache docker curl bash git
+                sudo apt-get update
+                sudo apt-get install -y docker.io curl bash git
+
+                # Installazione kubectl
+                sudo apt-get install -y apt-transport-https
+                curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+                echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee -a /etc/apt/sources.list.d/kubernetes.list
+                sudo apt-get update
+                sudo apt-get install -y kubectl
                 '''
                 echo 'Environment setup completed.'
             }
@@ -144,11 +152,6 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    echo 'Installing kubectl...'
-                    sh 'curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl'
-                    sh "chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl"
-                    echo "kubectl installed."
-
                     echo 'Deploying to Kubernetes cluster...'
                     
                     // 1. Sostituisce il placeholder nell'YAML con il tag corretto dell'immagine
