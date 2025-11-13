@@ -18,15 +18,17 @@ pipeline {
                 echo 'Setting up the environment...'
                 // Installa gli strumenti di orchestrazione (Docker client, curl, bash, git) su Debian/Ubuntu based agent
                 sh '''
-                sudo apt-get update
-                sudo apt-get install -y docker.io curl bash git
+                apt-get update
+                apt-get install -y docker.io curl bash git
 
                 # Installazione kubectl
-                sudo apt-get install -y apt-transport-https
-                curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
-                echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee -a /etc/apt/sources.list.d/kubernetes.list
-                sudo apt-get update
-                sudo apt-get install -y kubectl
+                apt-get install -y apt-transport-https
+                # Aggiunge la chiave GPG e il repository per kubectl
+                
+                curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+                echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | tee -a /etc/apt/sources.list.d/kubernetes.list
+                apt-get update
+                apt-get install -y kubectl
                 '''
                 echo 'Environment setup completed.'
             }
