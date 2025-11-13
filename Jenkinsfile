@@ -11,95 +11,106 @@ pipeline {
     }
 
     stages {
-        
-         //Fase 1: Training del modello e validazione della qualità
-        stage('Model Training') {
-            agent {
-                docker {
-                    image 'python:3.10-slim'
-                    args '-u root'
-                }
-            }
-            steps {
-                script {
-                    echo 'Starting model training and logging to MLflow...'
-                    //Esporta l'URI di MLflow e avvia lo script di training
-                    sh "export MLFLOW_TRACKING_URI='${MLFLOW_TRACKING_URI}' && python3 train_model.py"
-                }
+    // Fase preliminare: Setup dell'ambiente sull'agente Alpine
+    stage('Setup Environment') {
+        steps {
+            script {
+                echo 'Setting up the environment...'
+                // Installa gli strumenti di orchestrazione (Docker client, curl, bash, git) sull'agente Alpine
+                sh '''
+                apk add --no-cache docker curl bash git
+                '''
+                echo 'Environment setup completed.'
             }
         }
-        
-        //Implementazione del Quality Gate
-        stage('Validate Model Quality') {
-            agent {
-                docker {
-                    image 'python:3.10-slim'
-                    args '-u root'
-                }
-            }
-            steps {
-                script {
-                    echo 'Reading F1-Score from model_metrics.txt...'
-                    // 1. Legge l'F1-Score dal file generato da train_model.py
-                    def f1_score = sh(script: "cat model_metrics.txt", returnStdout: true).trim()
-                    
-                    // 2. Confronto con la soglia definita
-                    if (f1_score.toFloat() < MIN_F1_SCORE_THRESHOLD.toFloat()) {
-                        error("❌ Deployment BLOCKED: F1-Score (${f1_score}) is below threshold (${MIN_F1_SCORE_THRESHOLD}). Model quality insufficient.")
-                    } else {
-                        echo "✅ Quality Gate Passed: F1-Score (${f1_score}) is acceptable."
-                    }
-                }
+    }
+    
+    // Fase 1: Training del modello e validazione della qualità
+    stage('Model Training') {
+        agent {
+            docker {
+                image 'python:3.10-slim'
+                args '-u root'
             }
         }
-        
-        // Fase 2: Test e sanity check dell'API
-        stage('Tests') {
-            agent {
-                docker {
-                    image 'python:3.10-slim'
-                    args '-u root'
-                }
-            }
-            steps {
-                script {
-                    echo 'Running application and API tests...'
-                    sh "export API_KEY='${API_KEY}' && uvicorn api:app --host 0.0.0.0 --port 8000 &"
-                    
-                    // Ciclo curl per testare attivamente l'endpoint dell'API
-                    sh '''
-                    echo "Performing sanity check on the API endpoint..."
-                    apk add curl 
+        steps {
+            script {
+                echo 'Installing project dependencies from requirements.txt...'
+                // Qui installi le dipendenze Python (pip è già disponibile nell'immagine)
+                sh 'pip install -r requirements.txt'
 
-                    timeout 30 bash -c \
-                    'while ! curl -s http://0.0.0.0:8000/health | grep -q "ok"; do \
-                    echo -n "Waiting for API to be healthy"; \
-                    sleep 1; \
-                    done; \
-                    echo ""; \
-                    echo "API is healthy!"'
-                    '''
-                    
-                    // Esegue i test con pytest
-                    echo "Executing pytest for API tests..."
-                    sh "pytest"
-                    
-                    // Termina il server Uvicorn
-                    echo "Stopping Uvicorn server..."
-                    sh "pkill uvicorn || true" 
+                echo 'Starting model training and logging to MLflow...'
+                sh "export MLFLOW_TRACKING_URI='${MLFLOW_TRACKING_URI}' && python3 train_model.py"
+            }
+        }
+    }
+    
+    // Implementazione del Quality Gate 
+    stage('Validate Model Quality') {
+        agent any
+        steps {
+            script {
+                echo 'Reading F1-Score from model_metrics.txt...'
+                // 1. Legge l'F1-Score
+                def f1_score = sh(script: "cat model_metrics.txt", returnStdout: true).trim()
+                
+                // 2. Confronto con la soglia definita
+                if (f1_score.toFloat() < MIN_F1_SCORE_THRESHOLD.toFloat()) {
+                    error("❌ Deployment BLOCKED: F1-Score (${f1_score}) è sotto la soglia (${MIN_F1_SCORE_THRESHOLD}).")
+                } else {
+                    echo "✅ Quality Gate Passed: F1-Score (${f1_score}) è accettabile."
                 }
             }
         }
+    }
+    
+    // Fase 2: Test e sanity check dell'API con Docker
+    stage('Tests') {
+        agent {
+            docker {
+                image 'python:3.10-slim'
+                args '-u root'
+            }
+        }
+        steps {
+            script {
+                sh '''
+                echo "Installing system dependencies (Debian) and Python requirements..."
+                apt-get update
+                apt-get install -y curl procps coreutils
+                pip install -r requirements.txt
+                '''
+
+                echo 'Running application and API tests...'
+                sh "export API_KEY='${API_KEY}' && uvicorn api:app --host 0.0.0.0 --port 8000 &"
+                
+                // Ciclo curl per testare attivamente l'endpoint dell'API
+                sh '''
+                echo "Performing sanity check on the API endpoint..."
+                timeout 30s bash -c \
+                'while ! curl -s http://0.0.0.0:8000/health | grep -q "ok"; do \
+                echo -n "Waiting for API to be healthy"; \
+                sleep 1; \
+                done; \
+                echo ""; \
+                echo "API is healthy!"'
+                '''
+                
+                // Esegue i test con pytest
+                echo "Executing pytest for API tests..."
+                sh "pytest"
+                
+                // Termina il server Uvicorn
+                echo "Stopping Uvicorn server..."
+                sh "pkill uvicorn || true" 
+            }
+        }
+    }
         
         // Fase 3: Building e versioning dell'Immagine Docker
         stage('Build Docker Image') {
             steps {
                 script {
-                    //Installazione del client Docker
-                    sh '''
-                    echo "Installing Docker client..."
-                    apk add --no-cache docker
-                    '''
                     // Ottiene l'hash del commit Git per il versioning
                     def GIT_COMMIT_TAG = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     echo "Using Git Commit Hash as tag: ${GIT_COMMIT_TAG}"
@@ -133,8 +144,7 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    //Installazione kubectl
-                    sh "apk add --no-cache curl bash"
+                    echo 'Installing kubectl...'
                     sh 'curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl'
                     sh "chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl"
                     echo "kubectl installed."

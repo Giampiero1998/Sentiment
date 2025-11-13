@@ -16,14 +16,14 @@ spec:
       labels:
         app: sentiment-api
     spec:
-      # 1. Riferimento all'ImagePullSecret (creato manualmente come 'regcred')
-      # Questo permette a Kubernetes di autenticarsi al tuo registry privato (tuo_registry_docker) per scaricare l'immagine.
+      # 1. Riferimento all'ImagePullSecret per il registro Docker privato
+      # Questo permette a Kubernetes di autenticarsi al registro privato Docker Hub per scaricare l'immagine
       imagePullSecrets:
       - name: regcred
         
       containers:
       - name: sentiment-api-container
-        # Placeholder che verrà sostituito dal Jenkinsfile con il tag GIT (es. tuo_registry_docker/sentiment-api:a1b2c3d)
+        # Placeholder che verrà sostituito dal Jenkinsfile con il tag GIT
         image: IMAGE_PLACEHOLDER 
         ports:
         - containerPort: 8000
