@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
     
@@ -23,8 +24,9 @@ pipeline {
                 script {
                     echo 'Installing project dependencies from requirements.txt...'
                     sh 'pip install -r requirements.txt'
-                    //Pulisce eventuali modelli vecchi
-                    echo 'Cleaning up old model files...'
+
+                    // Pulisce eventuali modelli vecchi
+                    echo 'Cleaning old model files...'
                     sh 'rm -f sentiment_model.pkl tfidf_vectorizer.pkl model_metrics.txt || true'
 
                     // 1. Esegue il training e salva l'F1-Score in model_metrics.txt
@@ -40,6 +42,10 @@ pipeline {
                     } else {
                         echo "✅ Quality Gate Passed: F1-Score (${f1_score}) è accettabile."
                     }
+                    
+                    // 3. Salva i file del modello per gli stage successivi
+                    echo 'Stashing model files for next stages...'
+                    stash includes: 'sentiment_model.pkl,tfidf_vectorizer.pkl,model_metrics.txt', name: 'model-files'
                 }
             }
         }
@@ -91,7 +97,7 @@ pipeline {
         
         // Fase 3: Building e versioning dell'Immagine Docker
         stage('Build Docker Image') {
-            agent any  // ✅ FIX: Usa l'agent principale con Docker già installato
+            agent any  
             steps {
                 script {
                     // Ottiene l'hash del commit Git per il versioning
@@ -124,7 +130,7 @@ pipeline {
 
         // Fase 4: Deploy su Kubernetes
         stage('Deploy to Kubernetes') {
-            agent any  // ✅ FIX: Usa l'agent principale
+            agent any  
             steps {
                 script {
                     echo 'Deploying to Kubernetes cluster...'
