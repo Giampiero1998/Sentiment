@@ -48,8 +48,22 @@ services:
     depends_on:
       - prometheus
 
-# Definizione del volume per la persistenza dei dati di Grafana
+  # 4. Servizio Jenkins (CI/CD)
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: jenkins-cicd
+    privileged: true
+    user: root
+    ports:
+      - "8080:8080"    # Jenkins UI
+      - "50000:50000"  # Jenkins agent port
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock  # Accesso Docker host
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    restart: unless-stopped
+
 volumes:
-  grafana-storage:
+  jenkins_home:
     driver: local
-    
