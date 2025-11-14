@@ -8,7 +8,7 @@ pipeline {
         API_KEY = 'SUPER_SECRET_TOKEN_12345'
         DOCKER_IMAGE_NAME = 'sentiment-api'
         //Separo il registry radice dal nome utente per facilitare il login/logout 
-        DOCKER_REGISTRY_URL = 'docker.io'
+        DOCKER_REGISTRY_URL = 'https://docker.io'
         DOCKER_NAMESPACE = 'giampiero98'
 
         MLFLOW_TRACKING_URI = 'sqlite:///mlruns.db' 
@@ -114,15 +114,18 @@ pipeline {
                     echo "Building Docker image with full tag: ${DOCKER_IMAGE_FULL_TAG}"
                     sh "docker build -t ${DOCKER_IMAGE_FULL_TAG} ."
 
+                    //Estrae l'host dal registry URL per il login
+                    def DOCKER_LOGIN_HOST = "${DOCKER_REGISTRY_URL}".replace('https://', '')
+
                     // Push sicuro tramite credenziali
                     withCredentials([usernamePassword(credentialsId: 'docker-registry-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
 
-                        sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin ${DOCKER_REGISTRY_URL}"
+                        sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin ${DOCKER_LOGIN_HOST}"
 
                         sh "docker push ${DOCKER_IMAGE_FULL_TAG}"
                         echo "Docker image pushed successfully: ${DOCKER_IMAGE_FULL_TAG}"
                         
-                        sh "docker logout ${DOCKER_REGISTRY_URL} || true"
+                        sh "docker logout ${DOCKER_LOGIN_HOST} || true"
                     }
 
                     // Aggiorna le variabili d'ambiente per i passaggi successivi
@@ -138,13 +141,15 @@ pipeline {
             steps {
                 script {
                     echo 'Deploying to Kubernetes cluster...'
+                    // Eliminiamo il protocollo dal registry URL per kubectl
+                    def FINAL_IMAGE_TAG = env.DOCKER_IMAGE_FULL_TAG.replace('https://', '')
                     
                     // 1. Sostituisce il placeholder nell'YAML con il tag corretto dell'immagine
-                    sh "sed 's|IMAGE_PLACEHOLDER|${env.DOCKER_IMAGE_FULL_TAG}|g' k8s_deployment.yml > k8s_deployment_final.yml"
+                    sh "sed 's|IMAGE_PLACEHOLDER|${FINAL_IMAGE_TAG}|g' k8s_deployment.yml > k8s_deployment_final.yml"
                     
                     // 2. Applica la configurazione a Kubernetes
                     sh "kubectl apply -f k8s_deployment_final.yml"
-                    echo "Deployment completed for version: ${env.DOCKER_IMAGE_FULL_TAG}"
+                    echo "Deployment completed for version: ${FINAL_IMAGE_TAG}"
                 }
             }
 
