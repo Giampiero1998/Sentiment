@@ -108,11 +108,14 @@ pipeline {
                     echo "Using Git Commit Hash as tag: ${GIT_COMMIT_TAG}"
 
                     // Definisce il tag completo dell'immagine Docker
-                    def DOCKER_IMAGE_FULL_TAG = "${DOCKER_REGISTRY_URL}/${DOCKER_NAMESPACE}/${DOCKER_IMAGE_NAME}:${GIT_COMMIT_TAG}"
+                    def DOCKER_IMAGE_FULL_TAG_WITH_PROTOCOL = "${DOCKER_REGISTRY_URL}/${DOCKER_NAMESPACE}/${DOCKER_IMAGE_NAME}:${GIT_COMMIT_TAG}"
+
+                    // Variabile finale per i comandi CLI (senza https://)
+                    def DOCKER_IMAGE_FULL_TAG_CLI = DOCKER_IMAGE_FULL_TAG_WITH_PROTOCOL.replace('https://', '')
                     
                     // Debug e build dell'immagine Docker
-                    echo "Building Docker image with full tag: ${DOCKER_IMAGE_FULL_TAG}"
-                    sh "docker build -t ${DOCKER_IMAGE_FULL_TAG} ."
+                    echo "Building Docker image with full tag: ${DOCKER_IMAGE_FULL_TAG_CLI}"
+                    sh "docker build -t ${DOCKER_IMAGE_FULL_TAG_CLI} ."
 
                     //Estrae l'host dal registry URL per il login
                     def DOCKER_LOGIN_HOST = "${DOCKER_REGISTRY_URL}".replace('https://', '')
@@ -122,15 +125,15 @@ pipeline {
 
                         sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin ${DOCKER_LOGIN_HOST}"
 
-                        sh "docker push ${DOCKER_IMAGE_FULL_TAG}"
-                        echo "Docker image pushed successfully: ${DOCKER_IMAGE_FULL_TAG}"
+                        sh "docker push ${DOCKER_IMAGE_FULL_TAG_CLI}"
+                        echo "Docker image pushed successfully: ${DOCKER_IMAGE_FULL_TAG_CLI}"
                         
                         sh "docker logout ${DOCKER_LOGIN_HOST} || true"
                     }
 
                     // Aggiorna le variabili d'ambiente per i passaggi successivi
                     env.DOCKER_IMAGE_TAG = GIT_COMMIT_TAG
-                    env.DOCKER_IMAGE_FULL_TAG = DOCKER_IMAGE_FULL_TAG
+                    env.DOCKER_IMAGE_FULL_TAG = DOCKER_IMAGE_FULL_TAG_CLI
                 }
             }
         }
@@ -142,7 +145,7 @@ pipeline {
                 script {
                     echo 'Deploying to Kubernetes cluster...'
                     // Eliminiamo il protocollo dal registry URL per kubectl
-                    def FINAL_IMAGE_TAG = env.DOCKER_IMAGE_FULL_TAG.replace('https://', '')
+                    def FINAL_IMAGE_TAG = env.DOCKER_IMAGE_FULL_TAG
                     
                     // 1. Sostituisce il placeholder nell'YAML con il tag corretto dell'immagine
                     sh "sed 's|IMAGE_PLACEHOLDER|${FINAL_IMAGE_TAG}|g' k8s_deployment.yml > k8s_deployment_final.yml"
