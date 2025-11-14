@@ -142,7 +142,7 @@ pipeline {
         stage('Deploy to Kubernetes') {
             agent {
                 docker {
-                    image 'bitnami/kubectl:latest'
+                    image 'debian:latest'
                     args '--network host'
                 }
             }
@@ -153,7 +153,8 @@ pipeline {
                         echo 'Installing kubectl...'
                         sh '''
                         apt-get update
-                        apt-get install -y curl
+                        apt-get install -y curl sed
+
                         curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
                         chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl
                         '''
@@ -172,9 +173,7 @@ pipeline {
                         sh """
                         export KUBECONFIG="${KUBECONFIG_FILE}"
                         echo "Kubeconfig file location: ${KUBECONFIG_FILE}"
-                        echo "Kubeconfig content (first 10 lines):"
-                        head -n 10 "${KUBECONFIG_FILE}" || echo "Cannot read kubeconfig"
-                        echo "---"
+
                         echo "Testing cluster connection..."
                         kubectl cluster-info || echo "Cluster connection failed"
                         kubectl get nodes || echo "Cannot list nodes"
