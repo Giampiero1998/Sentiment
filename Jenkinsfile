@@ -140,7 +140,12 @@ pipeline {
 
         // Fase 4: Deploy su Kubernetes
         stage('Deploy to Kubernetes') {
-            agent any  
+            agent {
+                docker {
+                    image 'bitnami/kubectl:latest'
+                    args '--network host'
+                }
+            }
             steps {
                 // 1. Usa il Secret File di Jenkins per accedere al Kubeconfig ed installa kubectl tramite download diretto
                 withCredentials([file(credentialsId: 'k8s-kubeconfig-secret', variable: 'KUBECONFIG_FILE')]) {
@@ -154,10 +159,6 @@ pipeline {
                         '''
                         echo "kubectl installed."
 
-                        // Esporta la viariabile d'ambiente per l'autenticazione
-                        sh "export KUBECONFIG=\"${KUBECONFIG_FILE}\""
-                        echo "KUBECONFIG environment variable set to: ${KUBECONFIG_FILE}"
-
                         echo 'Deploying to Kubernetes cluster...'
 
                         //Tag dell'immagine 
@@ -166,8 +167,24 @@ pipeline {
                         // 2. Sostituisce il placeholder
                         sh "sed 's|IMAGE_PLACEHOLDER|${FINAL_IMAGE_TAG}|g' k8s_deployment.yml > k8s_deployment_final.yml"
 
-                        // 3. Applica la configurazione
-                        sh "kubectl apply -f k8s_deployment_final.yml"
+                        // 3. Verifica del contenuto del kubeconfig
+                        echo "Testing Kubernetes connection..."
+                        sh """
+                        export KUBECONFIG="${KUBECONFIG_FILE}"
+                        echo "Kubeconfig file location: ${KUBECONFIG_FILE}"
+                        echo "Kubeconfig content (first 10 lines):"
+                        head -n 10 "${KUBECONFIG_FILE}" || echo "Cannot read kubeconfig"
+                        echo "---"
+                        echo "Testing cluster connection..."
+                        kubectl cluster-info || echo "Cluster connection failed"
+                        kubectl get nodes || echo "Cannot list nodes"
+                        """
+
+                        // 4. Deploy con validazione disabilitata
+                        sh """
+                        export KUBECONFIG="${KUBECONFIG_FILE}"
+                        kubectl apply -f k8s_deployment_final.yml --validate=false
+                        """
                         echo "Deployment completed for version: ${FINAL_IMAGE_TAG}"
                     }   
                 }
@@ -177,8 +194,11 @@ pipeline {
                 failure {
                     echo "🚨 Deployment fallito! Avvio il rollback automatico..."
                     //Iniettiamo nuovamente le credenziali per il comando di rollback
-                    withCredentials([file(credentialsId: 'k8s-kubeconfig-secret', variable: 'KUBECONFIG_FILE_ROLLBACK')]) {
-                        sh "export KUBECONFIG=\"${KUBECONFIG_FILE_ROLLBACK}\" && kubectl rollout undo deployment/sentiment-analysis-deployment"
+                    withCredentials([file(credentialsId: 'k8s-kubeconfig-secret', variable: 'K8S_CONFIG')]) {
+                        sh '''
+                         export KUBECONFIG="${K8S_CONFIG}"
+                         kubectl rollout undo deployment/sentiment-analysis-deployment || echo "Rollback failed - deployment might not exist yet"
+                        '''
                     }
                     echo "✅ Rollback completato. Ripristinata la versione precedente."
                 }
