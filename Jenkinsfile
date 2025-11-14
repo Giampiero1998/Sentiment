@@ -155,8 +155,8 @@ pipeline {
                         echo "kubectl installed."
 
                         // Esporta la viariabile d'ambiente per l'autenticazione
-                        sh 'export KUBECONFIG="$(readlink -f ' + KUBECONFIG_FILE + ')"'
-                        echo "KUBECONFIG environment variable set."
+                        sh "export KUBECONFIG=\"${KUBECONFIG_FILE}\""
+                        echo "KUBECONFIG environment variable set to: ${KUBECONFIG_FILE}"
 
                         echo 'Deploying to Kubernetes cluster...'
 
@@ -178,7 +178,7 @@ pipeline {
                     echo "🚨 Deployment fallito! Avvio il rollback automatico..."
                     //Iniettiamo nuovamente le credenziali per il comando di rollback
                     withCredentials([file(credentialsId: 'k8s-kubeconfig-secret', variable: 'KUBECONFIG_FILE_ROLLBACK')]) {
-                        sh 'export KUBECONFIG="$(readlink -f ' + KUBECONFIG_FILE_ROLLBACK + ')" && kubectl rollout undo deployment/sentiment-analysis-deployment'
+                        sh "export KUBECONFIG=\"${KUBECONFIG_FILE_ROLLBACK}\" && kubectl rollout undo deployment/sentiment-analysis-deployment"
                     }
                     echo "✅ Rollback completato. Ripristinata la versione precedente."
                 }
