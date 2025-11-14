@@ -142,25 +142,43 @@ pipeline {
         stage('Deploy to Kubernetes') {
             agent any  
             steps {
-                script {
-                    echo 'Deploying to Kubernetes cluster...'
-                    // Eliminiamo il protocollo dal registry URL per kubectl
-                    def FINAL_IMAGE_TAG = env.DOCKER_IMAGE_FULL_TAG
-                    
-                    // 1. Sostituisce il placeholder nell'YAML con il tag corretto dell'immagine
-                    sh "sed 's|IMAGE_PLACEHOLDER|${FINAL_IMAGE_TAG}|g' k8s_deployment.yml > k8s_deployment_final.yml"
-                    
-                    // 2. Applica la configurazione a Kubernetes
-                    sh "kubectl apply -f k8s_deployment_final.yml"
-                    echo "Deployment completed for version: ${FINAL_IMAGE_TAG}"
+                // 1. Usa il Secret File di Jenkins per accedere al Kubeconfig ed installa kubectl tramite download diretto
+                withCredentials([file(credentialsId: 'k8s-kubeconfig-secret', variable: 'KUBECONFIG_FILE')]) {
+                    script {
+                        echo 'Installing kubectl...'
+                        sh '''
+                        apt-get update
+                        apt-get install -y curl
+                        curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+                        chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl
+                        '''
+                        echo "kubectl installed."
+
+                        sh "export KUBECONFIG=$KUBECONFIG_FILE"
+                        echo "KUBECONFIG environment variable set."
+
+                        echo 'Deploying to Kubernetes cluster...'
+
+                        //Tag dell'immagine 
+                        def FINAL_IMAGE_TAG = env.DOCKER_IMAGE_FULL_TAG
+
+                        // 2. Sostituisce il placeholder
+                        sh "sed 's|IMAGE_PLACEHOLDER|${FINAL_IMAGE_TAG}|g' k8s_deployment.yml > k8s_deployment_final.yml"
+
+                        // 3. Applica la configurazione
+                        sh "kubectl apply -f k8s_deployment_final.yml"
+                        echo "Deployment completed for version: ${FINAL_IMAGE_TAG}"
+                    }   
                 }
             }
-
             // Gestione del rollback in caso di fallimento del deploy
             post {
                 failure {
                     echo "🚨 Deployment fallito! Avvio il rollback automatico..."
-                    sh "kubectl rollout undo deployment/sentiment-analysis-deployment"
+                    //Iniettiamo nuovamente le credenziali per il comando di rollback
+                    withCredentials([file(credentialsId: 'k8s-kubeconfig-secret', variable: 'KUBECONFIG_FILE_ROLLBACK')]) {
+                        sh "export KUBECONFIG=$KUBECONFIG_FILE_ROLLBACK && kubectl rollout undo deployment/sentiment-analysis-deployment"
+                    }
                     echo "✅ Rollback completato. Ripristinata la versione precedente."
                 }
             }

@@ -1,4 +1,6 @@
- # Definisce il deployment per l'applicazione di analisi del sentiment
+# =========================================================
+# 1. Deployment (Gestisce i Pod e lo stato dell'applicazione)
+# =========================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -11,13 +13,13 @@ spec:
   selector:
     matchLabels:
       app: sentiment-api
+  # La specifica del template del pod
   template:
     metadata:
       labels:
         app: sentiment-api
     spec:
-      # 1. Riferimento all'ImagePullSecret per il registro Docker privato
-      # Questo permette a Kubernetes di autenticarsi al registro privato Docker Hub per scaricare l'immagine
+      # Riferimento all'ImagePullSecret per il registro Docker privato (regcred)
       imagePullSecrets:
       - name: regcred
         
@@ -36,16 +38,16 @@ spec:
             memory: "256Mi"
             cpu: "500m"
         
-        # 2. Carica l'API_KEY dal Secret di Kubernetes (sentiment-api-key)
-        # Iniettando la chiave come variabile d'ambiente, la si mantiene fuori dal codice sorgente e dai file di configurazione non crittografati.
+        # Carica l'API_KEY dal Secret di Kubernetes (sentiment-api-key)
         env:
         - name: API_KEY
           valueFrom:
             secretKeyRef:
               name: sentiment-api-key # Nome del Secret creato
               key: API_KEY # Chiave all'interno del Secret
-        # 3. Configura le sonde di liveness e readiness per monitorare lo stato dell'applicazione
-        livenessProbe:  
+
+        # Configura le sonde di liveness e readiness
+        livenessProbe:   
           httpGet:
             path: /health
             port: 8000
@@ -60,8 +62,20 @@ spec:
           periodSeconds: 10
           failureThreshold: 3
 
-  # NodePort Service per esporre l'applicazione all'esterno del cluster
+# =========================================================
+# 2. Service (Espone l'applicazione all'esterno del cluster)
+# =========================================================
 ---
+apiVersion: v1
+kind: Service  
+metadata:
+  name: sentiment-analysis-service
+  labels:
+    app: sentiment-api
+spec:
+  selector:
+    # Assicura che il Service indirizzi il traffico ai Pod creati dal Deployment
+    app: sentiment-api 
   type: NodePort 
   ports:
     - port: 80
