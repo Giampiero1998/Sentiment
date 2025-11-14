@@ -118,7 +118,7 @@ pipeline {
                         sh "docker push ${DOCKER_IMAGE_FULL_TAG}"
                         echo "Docker image pushed successfully: ${DOCKER_IMAGE_FULL_TAG}"
                         
-                        sh "docker logout ${DOCKER_REGISTRY}"
+                        sh "docker logout ${DOCKER_REGISTRY} || true"
                     }
 
                     // Aggiorna le variabili d'ambiente per i passaggi successivi
