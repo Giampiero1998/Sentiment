@@ -7,7 +7,10 @@ pipeline {
         MIN_F1_SCORE_THRESHOLD = '0.85' 
         API_KEY = 'SUPER_SECRET_TOKEN_12345'
         DOCKER_IMAGE_NAME = 'sentiment-api'
-        DOCKER_REGISTRY = 'docker.io/giampiero98'
+        //Separo il registry radice dal nome utente per facilitare il login/logout 
+        DOCKER_REGISTRY_URL = 'docker.io'
+        DOCKER_NAMESPACE = 'giampiero98'
+
         MLFLOW_TRACKING_URI = 'sqlite:///mlruns.db' 
     }
 
@@ -105,7 +108,7 @@ pipeline {
                     echo "Using Git Commit Hash as tag: ${GIT_COMMIT_TAG}"
 
                     // Definisce il tag completo dell'immagine Docker
-                    def DOCKER_IMAGE_FULL_TAG = "${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${GIT_COMMIT_TAG}"
+                    def DOCKER_IMAGE_FULL_TAG = "${DOCKER_REGISTRY_URL}/${DOCKER_NAMESPACE}/${DOCKER_IMAGE_NAME}:${GIT_COMMIT_TAG}"
                     
                     // Debug e build dell'immagine Docker
                     echo "Building Docker image with full tag: ${DOCKER_IMAGE_FULL_TAG}"
@@ -113,12 +116,13 @@ pipeline {
 
                     // Push sicuro tramite credenziali
                     withCredentials([usernamePassword(credentialsId: 'docker-registry-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin ${DOCKER_REGISTRY}"
+
+                        sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin ${DOCKER_REGISTRY_URL}"
 
                         sh "docker push ${DOCKER_IMAGE_FULL_TAG}"
                         echo "Docker image pushed successfully: ${DOCKER_IMAGE_FULL_TAG}"
                         
-                        sh "docker logout ${DOCKER_REGISTRY} || true"
+                        sh "docker logout ${DOCKER_REGISTRY_URL} || true"
                     }
 
                     // Aggiorna le variabili d'ambiente per i passaggi successivi
