@@ -148,7 +148,7 @@ pipeline {
             }
             steps {
                 // 1. Usa il Secret File di Jenkins per accedere al Kubeconfig ed installa kubectl tramite download diretto
-                withCredentials([file(credentialsId: 'k8s-kubeconfig-secret', variable: 'KUBECONFIG_FILE')]) {
+                withCredentials([string(credentialsId: 'k8s-kubeconfig-text', variable: 'KUBECONFIG_CONTENT')]) {
                     script {
                         echo 'Installing kubectl...'
                         sh '''
@@ -159,6 +159,15 @@ pipeline {
                         chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl
                         '''
                         echo "kubectl installed."
+
+                        //Creiamo il file kubeconfig dal secret text
+                        echo 'Creating kubeconfig from secret text...'
+                        sh '''
+                        echo "${KUBECONFIG_CONTENT}" > /tmp/kubeconfig.yml
+                        export KUBECONFIG="/tmp/kubeconfig.yml"
+
+                        echo "Kubeconfig created at /tmp/kubeconfig.yml"
+                        '''
 
                         echo 'Deploying to Kubernetes cluster...'
 
@@ -171,30 +180,30 @@ pipeline {
                         // 2.1 Fase di Debug
                         echo "=== DEBUGGING KUBECONFIG ==="
                         sh '''
-                        export KUBECONFIG="${KUBECONFIG_FILE}"
+                        export KUBECONFIG="/tmp/kubeconfig.yml"
                         echo ""
-                        echo "=== FIRST 30 LINES OF KUBECONFIG ==="
-                        head -n 30 "${KUBECONFIG_FILE}"
+                        echo "=== FIRST 20 LINES OF KUBECONFIG ==="
+                        head -n 20 /tmp/kubeconfig.yml
                         echo ""
                         echo "=== CHECKING FOR insecure-skip-tls-verify ==="
-                        grep -i "insecure-skip-tls-verify" "${KUBECONFIG_FILE}" || echo "NOT FOUND!"
+                        grep -i "insecure-skip-tls-verify" /tmp/kubeconfig.yml || echo "NOT FOUND!"
                         echo ""
                         echo "=== CHECKING FOR certificate-authority-data ==="
-                        grep -i "certificate-authority-data" "${KUBECONFIG_FILE}" || echo "NOT FOUND!"
+                        grep -i "certificate-authority-data" /tmp/kubeconfig.yml || echo "NOT FOUND!"
                         echo ""
                         '''
 
                         // 3. Verifica del contenuto del kubeconfig
                         echo "Testing Kubernetes connection..."
                         sh '''
-                        export KUBECONFIG="${KUBECONFIG_FILE}"
+                        export KUBECONFIG="/tmp/kubeconfig.yml"
                         kubectl cluster-info --insecure-skip-tls-verify || echo "Cluster connection failed"
                         kubectl get nodes --insecure-skip-tls-verify || echo "Cannot list nodes"
                         '''
 
                         // 4. Deploy con validazione disabilitata e skip TLS verification
                         sh '''
-                        export KUBECONFIG="${KUBECONFIG_FILE}"
+                        export KUBECONFIG="/tmp/kubeconfig.yml"
                         kubectl apply -f k8s_deployment_final.yml --validate=false --insecure-skip-tls-verify
                         '''
                         echo "Deployment completed for version: ${FINAL_IMAGE_TAG}"
@@ -206,9 +215,10 @@ pipeline {
                 failure {
                     echo "🚨 Deployment fallito! Avvio il rollback automatico..."
                     //Iniettiamo nuovamente le credenziali per il comando di rollback
-                    withCredentials([file(credentialsId: 'k8s-kubeconfig-secret', variable: 'K8S_CONFIG')]) {
+                    withCredentials([string(credentialsId: 'k8s-kubeconfig-text', variable: 'KUBECONFIG_CONTENT')]) {
                         sh '''
-                        export KUBECONFIG="${K8S_CONFIG}"
+                        echo "${KUBECONFIG_CONTENT}" > /tmp/kubeconfig.yml
+                        export KUBECONFIG="/tmp/kubeconfig.yml"
                         kubectl rollout undo deployment/sentiment-analysis-deployment --insecure-skip-tls-verify || echo "Rollback failed - deployment might not exist yet"
                         '''
                     }
