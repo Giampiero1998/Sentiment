@@ -162,7 +162,7 @@ pipeline {
 
                         echo 'Deploying to Kubernetes cluster...'
 
-                        //Tag dell'immagine 
+                        //Tag dell' immagine
                         def FINAL_IMAGE_TAG = env.DOCKER_IMAGE_FULL_TAG
 
                         // 2. Sostituisce il placeholder
@@ -175,19 +175,19 @@ pipeline {
                         echo "Kubeconfig file location: ${KUBECONFIG_FILE}"
 
                         echo "Testing cluster connection..."
-                        kubectl cluster-info || echo "Cluster connection failed"
-                        kubectl get nodes || echo "Cannot list nodes"
+                        kubectl cluster-info --insecure-skip-tls-verify || echo "Cluster connection failed"
+                        kubectl get nodes --insecure-skip-tls-verify || echo "Cannot list nodes"
                         """
 
-                        // 4. Deploy con validazione disabilitata
+                        // 4. Deploy con validazione disabilitata e skip TLS verification
                         sh """
                         export KUBECONFIG="${KUBECONFIG_FILE}"
-                        kubectl apply -f k8s_deployment_final.yml --validate=false
+                        kubectl apply -f k8s_deployment_final.yml --validate=false --insecure-skip-tls-verify
                         """
                         echo "Deployment completed for version: ${FINAL_IMAGE_TAG}"
-                    }   
+                    }
                 }
-            }
+            }   
             // Gestione del rollback in caso di fallimento del deploy
             post {
                 failure {
@@ -195,15 +195,14 @@ pipeline {
                     //Iniettiamo nuovamente le credenziali per il comando di rollback
                     withCredentials([file(credentialsId: 'k8s-kubeconfig-secret', variable: 'K8S_CONFIG')]) {
                         sh '''
-                         export KUBECONFIG="${K8S_CONFIG}"
-                         kubectl rollout undo deployment/sentiment-analysis-deployment || echo "Rollback failed - deployment might not exist yet"
+                        export KUBECONFIG="${K8S_CONFIG}"
+                        kubectl rollout undo deployment/sentiment-analysis-deployment --insecure-skip-tls-verify || echo "Rollback failed - deployment might not exist yet"
                         '''
                     }
                     echo "✅ Rollback completato. Ripristinata la versione precedente."
                 }
             }
         }
-    }
     // Gestione degli esiti della pipeline
     post {
         success {
