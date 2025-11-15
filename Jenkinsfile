@@ -147,8 +147,8 @@ pipeline {
                 }
             }
             steps {
-                // 1. Usa il Secret File di Jenkins per accedere al Kubeconfig ed installa kubectl tramite download diretto
-                withCredentials([string(credentialsId: 'k8s-kubeconfig-text', variable: 'KUBECONFIG_CONTENT')]) {
+                // Usa il Secret File di Jenkins per accedere al Kubeconfig ed installa kubectl tramite download diretto
+                withCredentials([file(credentialsId: 'k8s-kubeconfig-file', variable: 'KUBECONFIG_FILE')]) {
                     script {
                         echo 'Installing kubectl...'
                         sh '''
@@ -160,51 +160,38 @@ pipeline {
                         '''
                         echo "kubectl installed."
 
-                        //Creiamo il file kubeconfig dal secret text
-                        echo 'Creating kubeconfig from secret text...'
+                        // Copia del file in una posizione standard
+                        echo 'Setting up kubeconfig...'
                         sh '''
-                        echo "${KUBECONFIG_CONTENT}" > /tmp/kubeconfig.yml
-                        export KUBECONFIG="/tmp/kubeconfig.yml"
+                        mkdir -p ~/.kube
+                        cp ${KUBECONFIG_FILE} ~/.kube/config
+                        chmod 600 ~/.kube/config
+                        export KUBECONFIG=~/.kube/config
 
-                        echo "Kubeconfig created at /tmp/kubeconfig.yml"
+                        echo "Kubeconfig configured"
                         '''
 
                         echo 'Deploying to Kubernetes cluster...'
 
-                        //Tag dell' immagine
+                        // Tag dell' immagine
                         def FINAL_IMAGE_TAG = env.DOCKER_IMAGE_FULL_TAG
 
-                        // 2. Sostituisce il placeholder
+                        // Sostituisce il placeholder
                         sh "sed 's|IMAGE_PLACEHOLDER|${FINAL_IMAGE_TAG}|g' k8s_deployment.yml > k8s_deployment_final.yml"
 
-                        // 2.1 Fase di Debug
-                        echo "=== DEBUGGING KUBECONFIG ==="
-                        sh '''
-                        export KUBECONFIG="/tmp/kubeconfig.yml"
-                        echo ""
-                        echo "=== FIRST 20 LINES OF KUBECONFIG ==="
-                        head -n 20 /tmp/kubeconfig.yml
-                        echo ""
-                        echo "=== CHECKING FOR insecure-skip-tls-verify ==="
-                        grep -i "insecure-skip-tls-verify" /tmp/kubeconfig.yml || echo "NOT FOUND!"
-                        echo ""
-                        echo "=== CHECKING FOR certificate-authority-data ==="
-                        grep -i "certificate-authority-data" /tmp/kubeconfig.yml || echo "NOT FOUND!"
-                        echo ""
-                        '''
-
-                        // 3. Verifica del contenuto del kubeconfig
+                        // Verifica del contenuto del kubeconfig
                         echo "Testing Kubernetes connection..."
                         sh '''
-                        export KUBECONFIG="/tmp/kubeconfig.yml"
-                        kubectl cluster-info --insecure-skip-tls-verify || echo "Cluster connection failed"
-                        kubectl get nodes --insecure-skip-tls-verify || echo "Cannot list nodes"
+                        export KUBECONFIG=~/.kube/config
+                        kubectl cluster-info --insecure-skip-tls-verify 
+                        kubectl get nodes --insecure-skip-tls-verify || echo "Cannot list nodes (permissions issue)"
                         '''
 
-                        // 4. Deploy con validazione disabilitata e skip TLS verification
+                        // Deploy 
+                        echo "Applying deployment..."
                         sh '''
-                        export KUBECONFIG="/tmp/kubeconfig.yml"
-                        kubectl apply -f k8s_deployment_final.yml --validate=false --insecure-skip-tls-verify
+                        export KUBECONFIG=~/.kube/config
+                        kubectl apply -f k8s_deployment_final.yml --insecure-skip-tls-verify
                         '''
                         echo "Deployment completed for version: ${FINAL_IMAGE_TAG}"
                     }
@@ -215,10 +202,10 @@ pipeline {
                 failure {
                     echo "🚨 Deployment fallito! Avvio il rollback automatico..."
                     //Iniettiamo nuovamente le credenziali per il comando di rollback
-                    withCredentials([string(credentialsId: 'k8s-kubeconfig-text', variable: 'KUBECONFIG_CONTENT')]) {
+                    withCredentials([file(credentialsId: 'k8s-kubeconfig-file', variable: 'KUBECONFIG_FILE')]) {
                         sh '''
-                        echo "${KUBECONFIG_CONTENT}" > /tmp/kubeconfig.yml
-                        export KUBECONFIG="/tmp/kubeconfig.yml"
+                        cp ${KUBECONFIG_FILE} ~/.kube/config
+                        export KUBECONFIG=~/.kube/config
                         kubectl rollout undo deployment/sentiment-analysis-deployment --insecure-skip-tls-verify || echo "Rollback failed - deployment might not exist yet"
                         '''
                     }
