@@ -138,7 +138,7 @@ pipeline {
         stage('Deploy to Kubernetes') {
             agent {
                 docker {
-                    image 'debian:latest'
+                    image 'debian:latest
                     args '--network host'
                 }
             }
