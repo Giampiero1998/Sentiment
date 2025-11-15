@@ -168,16 +168,29 @@ pipeline {
                         // 2. Sostituisce il placeholder
                         sh "sed 's|IMAGE_PLACEHOLDER|${FINAL_IMAGE_TAG}|g' k8s_deployment.yml > k8s_deployment_final.yml"
 
+                        // 2.1 Fase di Debug
+                        echo "=== DEBUGGING KUBECONFIG ==="
+                        sh '''
+                        export KUBECONFIG="${KUBECONFIG_FILE}"
+                        echo ""
+                        echo "=== FIRST 30 LINES OF KUBECONFIG ==="
+                        head -n 30 "${KUBECONFIG_FILE}"
+                        echo ""
+                        echo "=== CHECKING FOR insecure-skip-tls-verify ==="
+                        grep -i "insecure-skip-tls-verify" "${KUBECONFIG_FILE}" || echo "NOT FOUND!"
+                        echo ""
+                        echo "=== CHECKING FOR certificate-authority-data ==="
+                        grep -i "certificate-authority-data" "${KUBECONFIG_FILE}" || echo "NOT FOUND!"
+                        echo ""
+                        '''
+
                         // 3. Verifica del contenuto del kubeconfig
                         echo "Testing Kubernetes connection..."
-                        sh """
+                        sh '''
                         export KUBECONFIG="${KUBECONFIG_FILE}"
-                        echo "Kubeconfig file location: ${KUBECONFIG_FILE}"
-
-                        echo "Testing cluster connection..."
                         kubectl cluster-info --insecure-skip-tls-verify || echo "Cluster connection failed"
                         kubectl get nodes --insecure-skip-tls-verify || echo "Cannot list nodes"
-                        """
+                        '''
 
                         // 4. Deploy con validazione disabilitata e skip TLS verification
                         sh '''
