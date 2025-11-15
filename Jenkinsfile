@@ -203,6 +203,7 @@ pipeline {
                 }
             }
         }
+    }
     // Gestione degli esiti della pipeline
     post {
         success {
