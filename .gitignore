@@ -3,3 +3,5 @@ mlruns.db
 model_metrics.txt
 mlruns.db
 mlruns/
+fresh_kubeconfig_finale.ymlkubectl
+fresh_kubeconfig_finale.yml
