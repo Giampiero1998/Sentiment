@@ -180,10 +180,10 @@ pipeline {
                         """
 
                         // 4. Deploy con validazione disabilitata e skip TLS verification
-                        sh """
+                        sh '''
                         export KUBECONFIG="${KUBECONFIG_FILE}"
                         kubectl apply -f k8s_deployment_final.yml --validate=false --insecure-skip-tls-verify
-                        """
+                        '''
                         echo "Deployment completed for version: ${FINAL_IMAGE_TAG}"
                     }
                 }
