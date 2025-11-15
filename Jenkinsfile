@@ -160,40 +160,56 @@ pipeline {
                         '''
                         echo "kubectl installed."
 
-                        // Copia del file in una posizione standard
-                        echo 'Setting up kubeconfig...'
+                        // Legge il contenuto del file credential e lo scrive, verificandone successivamente la corretta creazione
+                        echo 'Configuring kubeconfig from credential file...'
                         sh '''
                         mkdir -p ~/.kube
-                        cp ${KUBECONFIG_FILE} ~/.kube/config
-                        chmod 600 ~/.kube/config
-                        export KUBECONFIG=~/.kube/config
 
-                        echo "Kubeconfig configured"
+                        cat "${KUBECONFIG_FILE}" > ~/.kube/config
+                        chmod 600 ~/.kube/config
+
+                        if [ ! -f ~/.kube/config ]; then
+                            echo "ERROR: Failed to create kubeconfig file"
+                            exit 1
+                        fi
+
+                        echo "✓ Kubeconfig file created successfully ($(wc -l < ~/.kube/config) lines)"
                         '''
 
                         echo 'Deploying to Kubernetes cluster...'
 
-                        // Tag dell' immagine
                         def FINAL_IMAGE_TAG = env.DOCKER_IMAGE_FULL_TAG
 
                         // Sostituisce il placeholder
                         sh "sed 's|IMAGE_PLACEHOLDER|${FINAL_IMAGE_TAG}|g' k8s_deployment.yml > k8s_deployment_final.yml"
 
-                        // Verifica del contenuto del kubeconfig
+                        // Test della connessione Kubernetes
                         echo "Testing Kubernetes connection..."
                         sh '''
                         export KUBECONFIG=~/.kube/config
-                        kubectl cluster-info --insecure-skip-tls-verify 
-                        kubectl get nodes --insecure-skip-tls-verify || echo "Cannot list nodes (permissions issue)"
+
+                        echo "Cluster info:"
+                        kubectl cluster-info --insecure-skip-tls-verify || echo "⚠ Cannot get cluster info"
+
+                        echo "Nodes:" 
+                        kubectl get nodes --insecure-skip-tls-verify || echo "⚠ Cannot list nodes (might be permissions)"
                         '''
 
-                        // Deploy 
-                        echo "Applying deployment..."
+                        // Deploy dell' applicazione
+                        echo "Applying Kubernetes deployment..."
                         sh '''
                         export KUBECONFIG=~/.kube/config
+
+                        #Apply del deployment
                         kubectl apply -f k8s_deployment_final.yml --insecure-skip-tls-verify
+
+                        echo "Waiting for deployment to be ready..."
+                        kubectl rollout status deployment/sentiment-analysis-deployment --timeout=120s --insecure-skip-tls-verify || echo "⚠ Rollout status check timed out"
+
+                        echo "Current pods:"
+                        kubectl get pods -l app=sentiment-analysis --insecure-skip-tls-verify
                         '''
-                        echo "Deployment completed for version: ${FINAL_IMAGE_TAG}"
+                        echo "✅ Deployment completed successfully for version: ${FINAL_IMAGE_TAG}"
                     }
                 }
             }   
@@ -204,12 +220,22 @@ pipeline {
                     //Iniettiamo nuovamente le credenziali per il comando di rollback
                     withCredentials([file(credentialsId: 'k8s-kubeconfig-file', variable: 'KUBECONFIG_FILE')]) {
                         sh '''
-                        cp ${KUBECONFIG_FILE} ~/.kube/config
+                        mkdir -p ~/.kube
+                        cat "${KUBECONFIG_FILE}" > ~/.kube/config
+                        chmod 600 ~/.kube/config
                         export KUBECONFIG=~/.kube/config
-                        kubectl rollout undo deployment/sentiment-analysis-deployment --insecure-skip-tls-verify || echo "Rollback failed - deployment might not exist yet"
+
+                        echo "Rolling back to previous version..."
+                        kubectl rollout undo deployment/sentiment-analysis-deployment --insecure-skip-tls-verify || echo "⚠ Rollback failed - deployment might not exist yet"
+
+                        echo "Deployment status after rollback:"
+                        kubectl rollout status deployment/sentiment-analysis-deployment --timeout=60s --insecure-skip-tls-verify || true
                         '''
                     }
                     echo "✅ Rollback completato. Ripristinata la versione precedente."
+                }
+                success {
+                    echo "✅ Kubernetes deployment successful!"
                 }
             }
         }
