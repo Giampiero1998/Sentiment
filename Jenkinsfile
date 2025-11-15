@@ -150,7 +150,10 @@ pipeline {
                             apt-get update -qq
                             apt-get install -y curl sed > /dev/null 2>&1
 
-                            curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"[...]
+
+                            KUBECTL_VERSION=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
+                            curl -LO "https://storage.googleapis.com/kubernetes-release/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+                            
                             chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl
                         
                             echo "✓ kubectl installed: $(kubectl version --client --short 2>/dev/null || echo 'installed')"
