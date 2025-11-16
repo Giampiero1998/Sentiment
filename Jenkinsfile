@@ -147,166 +147,56 @@ pipeline {
                     script {
                         echo 'Installing kubectl...'
                         sh '''
-                            apt-get update -qq
-                            apt-get install -y curl sed > /dev/null 2>&1
+                        apt-get update -qq
+                        apt-get install -y curl sed > /dev/null 2>&1
 
 
-                            KUBECTL_VERSION=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
-                            curl -LO "https://storage.googleapis.com/kubernetes-release/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+                        KUBECTL_VERSION=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
+                        curl -LO "https://storage.googleapis.com/kubernetes-release/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
                             
-                            chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl
+                        chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl
                         
-                            echo "✓ kubectl installed: $(kubectl version --client --short 2>/dev/null || echo 'installed')"
+                        echo "✓ kubectl installed: $(kubectl version --client --short 2>/dev/null || echo 'installed')"
                         '''
 
                         // Setup kubeconfig con validazione
                         echo 'Configuring kubeconfig...'
                         sh '''
-                            mkdir -p ~/.kube
-                        
-                            # Leggi e scrivi il kubeconfig
-                            cat "${KUBECONFIG_FILE}" > ~/.kube/config
-                            chmod 600 ~/.kube/config
-                        
-                            # Verifica che il file sia stato creato
-                            if [ ! -f ~/.kube/config ]; then
-                                echo "❌ ERROR: Failed to create kubeconfig file"
-                                exit 1
-                            fi
-                        
-                            FILE_SIZE=$(wc -c < ~/.kube/config)
-                            echo "✓ Kubeconfig created: ${FILE_SIZE} bytes, $(wc -l < ~/.kube/config) lines"
-                        
-                            # Mostra struttura kubeconfig (senza dati sensibili)
-                            echo "=== Kubeconfig Structure ==="
-                            grep -E "^(apiVersion|kind|current-context|clusters:|contexts:|users:)" ~/.kube/config || true
-                            echo "=========================="
+                        mkdir -p ~/.kube
+                        cat "${KUBECONFIG_FILE}" > ~/.kube/config
+                        chmod 600 ~/.kube/config
+
+                        #Verifica certificati
+                        if ! grep -q "client-certificate-data:" ~/.kube/config; 
+                            echo "❌ ERROR: No client certificate!"
+                            exit 1
+                        fi
+                        if ! grep -q "client-key-data:" ~/.kube/config; then
+                            echo "❌ ERROR: No client key!"
+                            exit 1
+                        fi
+                        echo "✓ Certificates present"
                         '''
 
-                        // Test connessione Kubernetes CRITICO
+                        // Test connessione Kubernetes 
                         echo 'Testing Kubernetes connection...'
                         sh '''
-                            export KUBECONFIG=~/.kube/config
-                        
-                            echo "Current context:"
-                            kubectl config current-context || echo "⚠ Cannot get current context"
-                        
-                            echo ""
-                            echo "Testing connection to cluster..."
-                        
-                            # Test 1: Cluster info
-                            if kubectl cluster-info --request-timeout=5s 2>&1 | grep -q "Kubernetes"; then
-                                echo "✓ Cluster connection successful"
-                                kubectl cluster-info
-                            else
-                                echo "⚠ Cluster info failed, trying with --insecure-skip-tls-verify..."
-                                kubectl cluster-info --insecure-skip-tls-verify || echo "⚠ Still cannot connect"
-                            fi
-                        
-                            echo ""
-                            echo "Testing API access..."
-                        
-                            # Test 2: API version
-                            if kubectl version 2>&1 | grep -q "Server Version"; then
-                                echo "✓ API accessible"
-                                kubectl version --short 2>/dev/null || kubectl version
-                            else
-                                echo "⚠ API not accessible, trying alternative..."
-                                kubectl version --insecure-skip-tls-verify || echo "⚠ Cannot get server version"
-                            fi
-                        
-                            echo ""
-                            echo "Testing authentication..."
-                        
-                            # Test 3: Get nodes (test auth)
-                            if kubectl get nodes --request-timeout=5s > /dev/null 2>&1; then
-                                echo "✓ Authentication successful"
-                                kubectl get nodes
-                            else
-                                echo "⚠ Authentication failed, trying with --insecure-skip-tls-verify..."
-                                kubectl get nodes --insecure-skip-tls-verify || echo "⚠ Cannot authenticate"
-                            fi
+                        export KUBECONFIG=~/.kube/config
+                        kubectl get nodes --insecure-skip-tls-verify
                         '''
 
-                        echo 'Preparing deployment manifest...'
+                        echo 'Deploying...'
                         def FINAL_IMAGE_TAG = env.DOCKER_IMAGE_FULL_TAG
-
                         sh """
-                            # Sostituisci placeholder con l'immagine Docker
-                            sed 's|IMAGE_PLACEHOLDER|${FINAL_IMAGE_TAG}|g' k8s_deployment.yml > k8s_deployment_final.yml
-
-                            echo "=== Generated Deployment ==="
-                            head -n 30 k8s_deployment_final.yml
-                            echo "==========================="
+                        sed 's|IMAGE_PLACEHOLDER|${FINAL_IMAGE_TAG}|g' k8s_deployment.yml > k8s_deployment_final.yml
                         """
 
-                        // Deploy con gestione errori avanzata
                         echo 'Applying Kubernetes deployment...'
                         sh '''
-                            export KUBECONFIG=~/.kube/config
-
-                            echo "Attempting deployment with standard validation..."
-
-                            # Tentativo 1: Deploy standard
-                            if kubectl apply -f k8s_deployment_final.yml --timeout=30s 2>&1; then
-                                echo "✓ Deployment applied successfully (standard)"
-                                DEPLOY_SUCCESS=true
-                            else
-                                echo "⚠ Standard deployment failed, trying with --insecure-skip-tls-verify..."
-                            
-                                # Tentativo 2: Deploy con --insecure-skip-tls-verify
-                                if kubectl apply -f k8s_deployment_final.yml --insecure-skip-tls-verify --timeout=30s 2>&1; then
-                                    echo "✓ Deployment applied successfully (insecure)"
-                                    DEPLOY_SUCCESS=true
-                                else
-                                    echo "⚠ Insecure deployment failed, trying without validation..."
-
-                                    # Tentativo 3: Deploy senza validazione
-                                    if kubectl apply -f k8s_deployment_final.yml --validate=false --insecure-skip-tls-verify --timeout=30s 2>&1; then
-                                        echo "✓ Deployment applied successfully (no validation)"
-                                        DEPLOY_SUCCESS=true
-                                    else
-                                        echo "❌ All deployment attempts failed!"
-
-                                        # Debug finale
-                                        echo ""
-                                        echo "=== DEBUG INFO ==="
-                                        echo "Kubeconfig content check:"
-                                        ls -lh ~/.kube/config
-
-                                        echo ""
-                                        echo "Kubernetes server reachable:"
-                                        curl -k https://kubernetes.docker.internal:6443/version 2>&1 || echo "Server not reachable"
-
-                                        echo ""
-                                        echo "Current deployments:"
-                                        kubectl get deployments --all-namespaces --insecure-skip-tls-verify 2>&1 || echo "Cannot list deployments"
-
-                                        exit 1
-                                    fi
-                                fi
-                            fi
-
-                            # Verifica stato deployment
-                            echo ""
-                            echo "Checking deployment status..."
-                            kubectl get deployment sentiment-analysis-deployment --insecure-skip-tls-verify -o wide 2>&1 || echo "⚠ Cannot get deployment status"
-
-                            echo ""
-                            echo "Waiting for rollout to complete..."
-                            if kubectl rollout status deployment/sentiment-analysis-deployment --timeout=120s --insecure-skip-tls-verify 2>&1; then
-                                echo "✓ Rollout completed successfully"
-                            else
-                                echo "⚠ Rollout status check failed or timed out"
-                            fi
-
-                            echo ""
-                            echo "Current pods:"
-                            kubectl get pods -l app=sentiment-analysis --insecure-skip-tls-verify -o wide 2>&1 || echo "⚠ Cannot get pods"
-
-                            echo ""
-                            echo "Services:"
-                            kubectl get service sentiment-analysis-service --insecure-skip-tls-verify -o wide 2>&1 || echo "⚠ Cannot get service"
+                        export KUBECONFIG=~/.kube/config
+                        kubectl apply -f k8s_deployment_final.yml --validate=false --insecure-skip-tls-verify
+                        kubectl rollout status deployment/sentiment-analysis-deployment --timeout=120s --insecure-skip-tls-verify || true
+                        kubectl get pods -l app=sentiment-analysis --insecure-skip-tls-verify
                         '''
 
                         echo "✅ Deployment completed for version: ${FINAL_IMAGE_TAG}"
