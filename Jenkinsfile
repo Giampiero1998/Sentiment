@@ -152,10 +152,9 @@ pipeline {
 
 
                         KUBECTL_VERSION=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
-                        curl -LO "https://storage.googleapis.com/kubernetes-release/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
-                            
-                        chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl
-                        
+                        curl -LO "https://storage.googleapis.com/kubernetes-release/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"     
+                        chmod +x ./kubectl
+                        mv ./kubectl /usr/local/bin/kubectl
                         echo "✓ kubectl installed: $(kubectl version --client --short 2>/dev/null || echo 'installed')"
                         '''
 
@@ -167,11 +166,16 @@ pipeline {
                         chmod 600 ~/.kube/config
 
                         #Verifica certificati
-                        if ! grep -q "client-certificate-data:" ~/.kube/config; 
+                        if grep -q "client-certificate-data:" ~/.kube/config; then
+                            echo "✓ Client certificate present"
+                        else
                             echo "❌ ERROR: No client certificate!"
                             exit 1
                         fi
-                        if ! grep -q "client-key-data:" ~/.kube/config; then
+
+                        if grep -q "client-key-data:" ~/.kube/config; then
+                            echo "✓ Client key present"
+                        else
                             echo "❌ ERROR: No client key!"
                             exit 1
                         fi
@@ -182,7 +186,22 @@ pipeline {
                         echo 'Testing Kubernetes connection...'
                         sh '''
                         export KUBECONFIG=~/.kube/config
-                        kubectl get nodes --insecure-skip-tls-verify
+
+                        echo "Testing cluster connection..."
+                        if kubectl cluster-info --insecure-skip-tls-verify 2>&1 | grep -q "Kubernetes"; then
+                            echo "✓ Cluster reachable"
+                        else
+                            echo "⚠ Cluster info failed"
+                        fi
+
+                        echo ""
+                        echo "Testing authentication..."
+                        if kubectl get nodes --insecure-skip-tls-verify; then
+                            echo "✓ Authentication successful"
+                        else
+                            echo "❌ Authentication failed!"
+                            exit 1
+                        fi
                         '''
 
                         echo 'Deploying...'
@@ -194,9 +213,27 @@ pipeline {
                         echo 'Applying Kubernetes deployment...'
                         sh '''
                         export KUBECONFIG=~/.kube/config
-                        kubectl apply -f k8s_deployment_final.yml --validate=false --insecure-skip-tls-verify
-                        kubectl rollout status deployment/sentiment-analysis-deployment --timeout=120s --insecure-skip-tls-verify || true
-                        kubectl get pods -l app=sentiment-analysis --insecure-skip-tls-verify
+
+                        echo "Applying deployment..."
+                        kubectl apply -f k8s_deployment_final.yml \\
+                            --validate=false \\
+                            --insecure-skip-tls-verify   
+                        
+                        echo ""
+                        echo "Waiting for rollout (max 2 minutes)..."
+                        kubectl rollout status deployment/sentiment-analysis-deployment \\
+                            --timeout=120s \\
+                            --insecure-skip-tls-verify || echo "⚠ Rollout check timed out"
+
+                        echo ""
+                        echo "=== Deployment Status ==="
+                        kubectl get pods -l app=sentiment-analysis \\
+                            --insecure-skip-tls-verify -o wide
+
+                        echo ""
+                        echo "=== Service Status ==="
+                        kubectl get service sentiment-analysis-service \\
+                            --insecure-skip-tls-verify -o wide
                         '''
 
                         echo "✅ Deployment completed for version: ${FINAL_IMAGE_TAG}"
@@ -209,20 +246,18 @@ pipeline {
                     echo "🚨 Deployment failed! Starting automatic rollback..."
                     withCredentials([file(credentialsId: 'k8s-kubeconfig-file', variable: 'KUBECONFIG_FILE')]) {
                         sh '''
-                            mkdir -p ~/.kube
-                            cat "${KUBECONFIG_FILE}" > ~/.kube/config
-                            chmod 600 ~/.kube/config
-                            export KUBECONFIG=~/.kube/config
+                        mkdir -p ~/.kube
+                        cat "${KUBECONFIG_FILE}" > ~/.kube/config
+                        chmod 600 ~/.kube/config
+                        export KUBECONFIG=~/.kube/config
 
-                            echo "Attempting rollback..."
-                            if kubectl rollout undo deployment/sentiment-analysis-deployment --insecure-skip-tls-verify 2>&1; then
-                                echo "✓ Rollback initiated"
-
-                                echo "Checking rollback status..."
-                                kubectl rollout status deployment/sentiment-analysis-deployment --timeout=60s --insecure-skip-tls-verify 2>&1 || echo "⚠ Cannot verify rollback status"
-                            else
-                                echo "⚠ Rollback failed - deployment might not exist yet (first deploy?)"
-                            fi
+                        echo "Attempting rollback..."
+                        if kubectl rollout undo deployment/sentiment-analysis-deployment --insecure-skip-tls-verify 2>&1; then
+                            echo "✓ Rollback initiated"
+                            kubectl rollout status deployment/sentiment-analysis-deployment --timeout=60s --insecure-skip-tls-verify || true
+                        else
+                            echo "⚠ Rollback failed - deployment might not exist yet (first deploy?)"
+                        fi
                         '''
                     }
                     echo "Rollback process completed"
