@@ -26,13 +26,21 @@ services:
       - "9090:9090" # Interfaccia Prometheus
     volumes:
       # Monta il file di configurazione locale per dire a Prometheus cosa monitorare
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - monitoring
+    restart: unless-stopped
     depends_on:
       - sentiment_api # Avvia Prometheus dopo l'API
 
-  # 3. Servizio Grafana (Visualizzazione Metriche)
+  # 3. Servizio Grafana (Visualizzazione dashboard)
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
@@ -40,11 +48,19 @@ services:
       - "3000:3000" # Interfaccia Grafana
     environment:
       # Configurazioni di base per Grafana
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
     volumes:
       # Persistenza dei dati di Grafana
       - grafana-storage:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - monitoring
+    restart: unless-stopped
     depends_on:
       - prometheus
 
@@ -66,8 +82,15 @@ services:
       - DOCKER_HOST=unix:///var/run/docker.sock
     restart: unless-stopped
 
+
+networks:
+  monitoring:
+    driver: bridge
+  
 volumes:
   jenkins_home:
     driver: local
   grafana-storage:
     driver: local
+  prometheus-data:
+  grafana-data:
