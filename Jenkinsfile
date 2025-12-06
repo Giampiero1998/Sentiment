@@ -227,7 +227,7 @@ pipeline {
 
                         echo ""
                         echo "=== Deployment Status ==="
-                        kubectl get pods -l app=sentiment-analysis \\
+                        kubectl get pods -l app=sentiment-api \\
                             --insecure-skip-tls-verify -o wide
 
                         echo ""
