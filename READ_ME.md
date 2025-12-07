@@ -5,8 +5,8 @@ Sistema completo di **MLOps** per il deploy automatizzato e il monitoraggio in t
 ## 📋 Indice
 
 - [Panoramica](#-panoramica)
-- [Architettura](#-architettura)
-- [Tecnologie Utilizzate](#-tecnologie-utilizzate)
+- [Architettura] (#-architettura)
+- [Tecnologie Utilizzate] (#-tecnologie-utilizzate)
 - [Prerequisiti](#-prerequisiti)
 - [Installazione e Setup](#-installazione-e-setup)
 - [Utilizzo](#-utilizzo)
@@ -19,7 +19,7 @@ Sistema completo di **MLOps** per il deploy automatizzato e il monitoraggio in t
 - [Metriche del Modello](#-metriche-del-modello)
 - [Struttura del Progetto](#-struttura-del-progetto)
 - [Contributi](#-contributi)
-- [Licenza](#-licenza)
+- [Licenza] (#-licenza)
 
 ## 🌟 Panoramica
 
@@ -34,6 +34,7 @@ Il sistema include:
 - ✅ **Orchestrazione** con Kubernetes
 - ✅ **Monitoraggio** con Prometheus e Grafana
 - ✅ **Rollback automatico** in caso di fallimento
+- ✅ **Test completi** con copertura di tutti gli scenari
 
 ### 🎯 Benefici Aziendali
 
@@ -41,8 +42,9 @@ Il sistema include:
 - **Affidabilità**: Quality gate e rollback automatico garantiscono alta qualità
 - **Osservabilità**: Monitoraggio in tempo reale delle prestazioni del modello
 - **Scalabilità**: Architettura cloud-native con Kubernetes
+- **Robustezza**: Test suite completa con 30+ casi di test
 
-## 🏗️ Architettura
+## 🗃️ Architettura
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -63,11 +65,11 @@ Il sistema include:
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Kubernetes Cluster (Docker Desktop)          │
-│  ┌────────────────────────────────────────────────────────────┐ │
+│  ┌─────────────────────────────────────────────────────────────┐ │
 │  │              Sentiment Analysis Deployment                 │ │
 │  │  ┌──────────────┐              ┌──────────────┐            │ │
 │  │  │   Pod 1      │              │   Pod 2      │            │ │
-│  │  │ FastAPI App  │◄────────────►│ FastAPI App  │            │ │
+│  │  │ FastAPI App  │◄─────────────►│ FastAPI App  │            │ │
 │  │  └──────────────┘              └──────────────┘            │ │
 │  │         │                              │                   │ │
 │  │         └──────────────┬───────────────┘                   │ │
@@ -76,14 +78,14 @@ Il sistema include:
 │  │                │    Service     │                          │ │
 │  │                │  NodePort 30080│                          │ │
 │  │                └────────────────┘                          │ │
-│  └────────────────────────────────────────────────────────────┘ │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │ Scrape Metrics
-                           ▼
+│  └─────────────────────────────────────────────────────────────┘ │
+└──────────────────────┬──────────────────────────────────────────┘
+                       │ Scrape Metrics
+                       ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Monitoring Stack                           │
 │  ┌──────────────┐              ┌──────────────┐                 │
-│  │  Prometheus  │─────────────►│   Grafana    │                 │
+│  │  Prometheus  │──────────────►│   Grafana    │                 │
 │  │  (Scraper)   │   Metrics    │ (Dashboard)  │                 │
 │  └──────────────┘              └──────────────┘                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -319,12 +321,24 @@ Output atteso:
 ============================================================
 METRICHE DI VALUTAZIONE DEL MODELLO
 ============================================================
-F1-Score: 0.9500
-Accuracy: 0.9500
-Training set: 80 samples
-Test set: 20 samples
+F1-Score: 0.9167
+Accuracy: 0.9167
+Training set: 96 samples
+Test set: 24 samples
 
-✅ Quality Gate PASSED: F1-Score (0.9500) >= Threshold (0.85)
+Classification Report:
+              precision    recall  f1-score   support
+
+    Negative       0.92      0.92      0.92        12
+    Positive       0.92      0.92      0.92        12
+
+    accuracy                           0.92        24
+   macro avg       0.92      0.92      0.92        24
+weighted avg       0.92      0.92      0.92        24
+
+============================================================
+
+✅ Quality Gate PASSED: F1-Score (0.9167) >= Threshold (0.85)
 ```
 
 ### Avvio API in Locale
@@ -390,7 +404,7 @@ kubectl get services
 curl http://localhost:30080/health
 ```
 
-## 🔄 CI/CD Pipeline
+## 📄 CI/CD Pipeline
 
 La pipeline Jenkins è configurata per eseguire automaticamente ad ogni commit:
 
@@ -407,8 +421,12 @@ La pipeline Jenkins è configurata per eseguire automaticamente ad ogni commit:
 
 - Avvia API con Uvicorn
 - Esegue health check
-- Esegue test pytest (integrazione + autenticazione)
-- Verifica endpoint `/predict`
+- Esegue test pytest completi (30+ casi)
+- Verifica endpoint `/predict` con:
+  - ✅ Sentiment positivi (chiari e moderati)
+  - ❌ Sentiment negativi (chiari e moderati)
+  - ⚠️ Edge cases (brevi, errori, simboli)
+  - 🔒 Sicurezza e performance
 
 ### Stage 3: Build Docker Image
 
@@ -560,31 +578,69 @@ x-api-key: SUPER_SECRET_TOKEN_12345
 
 ## 🧪 Test
 
+### Test Suite Completa
+
+Il progetto include una suite di test completa con **30+ casi** che coprono:
+
+#### ✅ Sentiment Positivi (9 casi)
+
+- **Chiari**: "Absolutely love this!", "Best purchase ever!"
+- **Moderati**: "Pretty good", "Solid product"
+
+#### ❌ Sentiment Negativi (9 casi)
+
+- **Chiari**: "Terrible product!", "Worst purchase ever!"
+- **Moderati**: "Not very satisfied", "Disappointing"
+
+#### ⚠️ Edge Cases (12+ casi)
+
+- Testo breve: "Good", "Bad"
+- Errori ortografici: "Grate prodct"
+- Punteggiatura: "Great!!!", "Awful..."
+- Numeri/simboli: "5/5 stars"
+- Testo vuoto, lunghissimo
+- Caratteri speciali (emoji)
+- Sentiment misto
+- JSON malformato
+
+#### 🔒 Sicurezza & Performance
+
+- Test autenticazione (401)
+- Test performance (< 1 sec)
+- Test consistenza predizioni
+
 ### Esecuzione Test
 
 ```bash
 # Avvia API
 uvicorn api:app --host 0.0.0.0 --port 8000 &
 
-# Esegui test
+# Esegui tutti i test
 pytest test_api.py -v
 
-# Output atteso:
-# test_api.py::test_health_check PASSED
-# test_api.py::test_predict_sentiment_success[case1] PASSED
-# test_api.py::test_predict_sentiment_success[case2] PASSED
-# test_api.py::test_predict_sentiment_unauthorized PASSED
+# Esegui test specifici
+pytest test_api.py -v -k "positive"  # Solo positivi
+pytest test_api.py -v -k "negative"  # Solo negativi
+pytest test_api.py -v -k "edge"      # Solo edge cases
+
+# Con coverage report
+pytest test_api.py -v --cov=api --cov-report=html
 ```
 
-### Coverage Test
+**Output Atteso**:
 
-I test includono:
+```
+============================================= test session starts ==============================================
+collected 43 items
 
-- ✅ Health check endpoint
-- ✅ Predizione sentiment positivo
-- ✅ Predizione sentiment negativo
-- ✅ Autenticazione fallita (401)
-- ✅ Validazione tempo di risposta
+test_api.py::test_health_check PASSED                                                                   [  2%]
+test_api.py::test_predict_sentiment_all_cases[...] PASSED                                              [  4%]
+...
+test_api.py::test_response_time_performance PASSED                                                      [ 95%]
+test_api.py::test_consistency_multiple_requests PASSED                                                  [100%]
+
+============================================== 43 passed in 12.34s =============================================
+```
 
 ## 🔧 Troubleshooting
 
@@ -644,7 +700,29 @@ ls -la sentiment_model.pkl tfidf_vectorizer.pkl
 - Usa header: `x-api-key: SUPER_SECRET_TOKEN_12345`
 - Verifica secret K8s: `kubectl get secret sentiment-api-key -o yaml`
 
-## 🔄 Manutenzione
+### Problema: Test falliscono
+
+**Causa**: API non in esecuzione o modello non trainato
+
+**Soluzione**:
+
+```bash
+# 1. Training del modello
+python train_model.py
+
+# 2. Avvia API
+uvicorn api:app --host 0.0.0.0 --port 8000 &
+
+# 3. Attendi 3 secondi
+sleep 3
+
+# 4. Esegui test
+pytest test_api.py -v
+```
+
+Per una guida completa al troubleshooting, consulta il documento `TESTING_GUIDE.md`.
+
+## 📄 Manutenzione
 
 ### Aggiornamento Modello
 
@@ -710,36 +788,55 @@ kubectl rollout undo deployment/sentiment-analysis-deployment --to-revision=2
 
 ### Training Performance
 
-| Metrica | Valore | Threshold     |
-|---------|--------|---------------|
-| **F1-Score** | 0.95 | >= 0.85✅  |
-| **Accuracy** | 0.95 | -          |
-| **Precision** | 0.95| -          |
-| **Recall** | 0.95   | -          |
+| Metrica | Valore | Threshold |
+|---------|--------|-----------|
+| **F1-Score** | 0.92 | >= 0.85 ✅ |
+| **Accuracy** | 0.92 | - |
+| **Precision** | 0.92 | - |
+| **Recall** | 0.92 | - |
 
 ### Dataset
 
-- **Dimensione totale**: 100 recensioni
-- **Training set**: 80 recensioni (80%)
-- **Test set**: 20 recensioni (20%)
-- **Bilanciamento**: 50% positive, 50% negative
+- **Dimensione totale**: 120 recensioni **realistiche**
+- **Training set**: 96 recensioni (80%)
+- **Test set**: 24 recensioni (20%)
+- **Bilanciamento**: 50% positive (60), 50% negative (60)
 - **Lingua**: Inglese
-- **Dominio**: Recensioni prodotti e servizi
+- **Dominio**: E-commerce, ristoranti, hotel, tech, servizi
+- **Caratteristiche**:
+  - Recensioni complesse e naturali
+  - Linguaggio colloquiale autentico
+  - Dettagli specifici e contestuali
+  - Variabilità di lunghezza e stile
 
 ### Modello
 
 - **Algoritmo**: Logistic Regression
-- **Vectorization**: TF-IDF (max_features=200, ngram_range=(1,2))
+- **Vectorization**: TF-IDF (max_features=300, ngram_range=(1,2))
 - **Regolarizzazione**: C=1.0, class_weight='balanced'
 - **Framework**: scikit-learn
+
+### Esempi di Recensioni del Dataset
+
+**Positive**:
+
+- "Ordered this headset last week and honestly it exceeded my expectations. Sound quality is crisp..."
+- "Finally found a wireless charger that doesn't overheat my phone. It's fast, looks sleek..."
+- "This laptop bag is a game changer. Fits my 15 inch MacBook perfectly..."
+
+**Negative**:
+
+- "Received this supposedly 'premium' keyboard today and I'm disappointed. Keys feel cheap..."
+- "Waited over two hours for cold pizza that tasted like cardboard. Never ordering again..."
+- "This hotel room was nothing like the photos. Dirty carpet, bathroom hadn't been cleaned..."
 
 ## 📁 Struttura del Progetto
 
 ```
 Sentiment/
 ├── api.py                          # REST API FastAPI
-├── train_model.py                  # Script training modello
-├── test_api.py                     # Test suite
+├── train_model.py                  # Script training modello (dataset realistico)
+├── test_api.py                     # Test suite completa (30+ casi)
 ├── requirements.txt                # Dipendenze Python
 ├── Dockerfile                      # Container definition
 ├── Jenkinsfile                     # CI/CD pipeline
@@ -769,16 +866,17 @@ Per contribuire:
 
 ## 👨‍💻 Autore
 
-**Giampiero**
+### Giampiero
 
 - GitHub: [@Giampiero1998](https://github.com/Giampiero1998)
 - Repository: <https://github.com/Giampiero1998/Sentiment>
 
-## 🙏 Contributi
+## 🙏 Riconoscimenti
 
-- Dataset: Custom training set basato su recensioni sintetiche
+- Dataset: Custom training set con 120 recensioni realistiche
 - Framework: FastAPI, scikit-learn, MLflow
 - Infrastructure: Docker, Kubernetes, Jenkins, Prometheus, Grafana
+- Testing: pytest con copertura completa
 - Corso: Progetto MLOps - Profession.AI
 
 ---
@@ -793,3 +891,22 @@ Per uso in produzione, considerare ulteriori hardening di sicurezza, scaling ava
 - Jenkins: <http://localhost:8080>
 - Prometheus: <http://localhost:9090>
 - Grafana: <http://localhost:3000>
+
+---
+
+## 📝 Changelog
+
+### v2.0 (Dicembre 2024) - Miglioramenti Qualità
+
+- ✅ Dataset completamente rinnovato con 120 recensioni realistiche
+- ✅ Test suite espansa: da 2 a 30+ casi di test
+- ✅ Copertura completa: positivi, negativi, edge cases
+- ✅ Robustezza aumentata con test di sicurezza e performance
+- ✅ Documentazione aggiornata e guida troubleshooting completa
+
+### v1.0 (Novembre 2024) - Release Iniziale
+
+- ✅ Pipeline MLOps completa
+- ✅ CI/CD con Jenkins
+- ✅ Deployment Kubernetes
+- ✅ Monitoring con Prometheus/Grafana
